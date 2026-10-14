@@ -29,8 +29,8 @@ clean:
 install: all
 	-groupadd share
 	-useradd -s /bin/false -g share ptinyload
-	mkdir -m 0755 $(PREFIX)/etc/ptinyloadd/
-	mkdir -m 0755 $(PREFIX)/libexec/ptinyloadd/
+	mkdir -pm 0755 $(PREFIX)/etc/ptinyloadd/
+	mkdir -pm 0755 $(PREFIX)/libexec/ptinyloadd/
 	cp -f ptinyloadd $(PREFIX)/bin/
 	cp -f ptinyloadd.conf $(PREFIX)/etc/ptinyloadd/
 	cp -fr ./libexec/ptinyloadd/* $(PREFIX)/libexec/ptinyloadd/
@@ -42,8 +42,8 @@ install: all
 	systemctl start ptinyloadd
 
 uninstall:
-	systemctl stop ptinyloadd
-	systemctl disable ptinyloadd
+	-systemctl stop ptinyloadd
+	-systemctl disable ptinyloadd
 	rm -rf $(PREFIX)/etc/ptinyloadd/
 	rm -rf $(PREFIX)/libexec/ptinyloadd/
 	rm -f  $(PREFIX)/bin/ptinyloadd
