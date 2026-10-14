@@ -17,12 +17,12 @@ sudo apt install libmicrohttpd-dev libjansson-dev zlib1g-dev
 
 git clone  https://github.com/plustiny/ptinyloadd.git
 cd ptinyloadd
-vi ptinyloadd.conf # change PORT, NAME, PASSWd
+vi ptinyloadd.conf # change PORT, NAME, PASSWD
 make
 sudo make install
 
-sudo ln -s /etc/letsencrypt/live/YOUR_SERVER/privkey.pem /usr/local/etc/ptinyloadd/privkey.pem
-sudo ln -s /etc/letsencrypt/live/YOUR_SERVER/fullchain.pem /usr/local/etc/ptinyloadd/fullchain.pem
+sudo ln -s /etc/letsencrypt/live/(YOUR_SERVER)/privkey.pem /usr/local/etc/ptinyloadd/privkey.pem
+sudo ln -s /etc/letsencrypt/live/(YOUR_SERVER)/fullchain.pem /usr/local/etc/ptinyloadd/fullchain.pem
 sudo systemctl restart ptinyloadd
 ```
 

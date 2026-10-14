@@ -478,8 +478,8 @@ int main(void) {
     pthread_create(&th, NULL, worker, NULL);
     pthread_detach(th);
 
-    DBG("conf.cert %s\n", conf.cert);
-    DBG("conf.key  %s\n", conf.key);
+    DBG("conf.cert %.5s\n", conf.cert);
+    DBG("conf.key  %.5s\n", conf.key);
     DBG("start MHD daemon\n");
     struct MHD_Daemon *d;
     if (conf.cert && conf.key) {
