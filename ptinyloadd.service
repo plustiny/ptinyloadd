@@ -1,0 +1,35 @@
+[Unit]
+Description=Download tool for Remote Server.
+Requires=nftables.service
+After=nftables.service
+After=network.target
+
+[Service]
+User=ptinyload
+Group=share
+UMask=002
+EnvironmentFile=/usr/local/etc/ptinyloadd/ptinyloadd.conf
+ExecStart=/usr/local/bin/ptinyloadd
+KillMode=mixed
+Restart=always
+
+# more harden
+InaccessiblePaths=/home
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+DevicePolicy=closed
+ProtectHome=yes
+ProtectSystem=full
+ProtectControlGroups=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictNamespaces=yes
+RestrictRealtime=yes
+MemoryDenyWriteExecute=yes
+LockPersonality=yes
+CapabilityBoundingSet=~CAP_SYS_ADMIN
+
+[Install]
+WantedBy=multi-user.target

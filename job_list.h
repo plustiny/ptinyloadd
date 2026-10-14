@@ -1,0 +1,38 @@
+#pragma once
+#include <jansson.h>
+#include <stdint.h>
+
+#define JOB_LINE_LENGTH 256
+
+typedef enum Job_status {
+    none = 0,
+    unprocessed = 1,
+    processing = 2,
+    finished = 4,
+    error = 8,
+    cancel = 16,
+    canceled = 32,
+    delete = 64,
+    deleted = 128,
+    all = 255,
+} Job_status;
+
+struct Job {
+    char *id;
+    char *post;
+    char *line;
+    char *scriptfile;
+    int  err;
+    Job_status status;
+		struct Job *next;
+};
+typedef struct Job Job_t;
+
+void job_load();
+void job_unload();
+int job_register(char *post, char *scriptfile);
+Job_t *job_next();
+json_t *job_to_json(uint32_t max, Job_status status);
+void job_change_status(const char *id, Job_status status, Job_status proc, Job_status wait);
+void job_clear_line(Job_t *);
+ 
