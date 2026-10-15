@@ -49,4 +49,10 @@ uninstall:
 	rm -f  $(PREFIX)/bin/ptinyloadd
 	rm -f  /etc/systemd/system/ptinyloadd.service
 
+gitupload:
+	git add .
+	git commit -m "$$(date -Is)" || true
+	git push -u origin main
+
+.PHONY: gitupload
 .PHONY: all clean
