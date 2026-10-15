@@ -149,15 +149,20 @@ static json_t *json_from_field(char *fmt, ...){
     va_list ap;
     va_start(ap, fmt);
     json_t *v = json_vpack_ex(&json_error, 0, fmt, ap);
+    if(conf.debug){
+        if(fmt[0]=='s') DBG("%s\n", va_arg(ap, char*));
+        if(fmt[0]=='i') DBG("%d\n", va_arg(ap, int));
+    }
     va_end(ap);
     if(v){
         return v;
     }else{
-        DBG("json error %s \n", json_error.text);
+        DBG("json error: %s \n", json_error.text);
         return json_string(json_error.text);
     }
 }
 #define SET_FIELD(o, key, fmt, field)   do{\
+    DBG("%s ",key);\
     json_t *v =json_from_field(fmt, field);\
     json_object_set_new(o, key, v);\
 }while(0);
