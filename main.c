@@ -270,7 +270,10 @@ static char *gzip_decompress(char *src, size_t src_size, size_t *out_size){
     }
     inflateEnd(&zs);
     *out_size = total;
-    return buf;
+    char *tmp = realloc(buf, total+1);
+    if(!tmp) goto ERROR;
+    tmp[total] = '\0';
+    return tmp;
 ERROR:
     free(buf);
     inflateEnd(&zs);
