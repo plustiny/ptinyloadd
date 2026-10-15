@@ -150,19 +150,25 @@ static void *worker(void *arg){
                 DBG(" > %s: %s", job->scriptfile, job->line);
             }
         }
+        int status;
         if(job->status == processing){
-            waitpid(pid, &(job->err), WNOHANG);
+            waitpid(pid, &status, WNOHANG);
+            job->ec = WEXITSTATUS(status);
             atomic_store(&(job->status), finished);
         }
         if(job->status == cancel){
-            if(gently_kill(pid, &(job->err)))   goto ERROR;
+            int err = gently_kill(pid, &status);
+            job->ec = WEXITSTATUS(status);
+            if(err) goto ERROR;
             atomic_store(&(job->status), canceled);
         }
         if(job->status == delete){
-            if(gently_kill(pid, &(job->err)))   goto ERROR;
+            int err = gently_kill(pid, &status);
+            job->ec = WEXITSTATUS(status);
+            if(err) goto ERROR;
             atomic_store(&(job->status), deleted);
         }
-        DBG(" > script's exit status = %d\n", job->err);
+        DBG(" > script's exit code = %d\n", job->ec);
         continue;
 ERROR:
         printf("❌ ERROR! at job %s %s.\n", job->scriptfile, job->post);

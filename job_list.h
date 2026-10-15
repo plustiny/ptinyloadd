@@ -23,7 +23,7 @@ struct Job {
     char *post;
     char *line;
     char *scriptfile;
-    int  err;
+    int  ec;
     _Atomic Job_status status;
 		struct Job *next;
 };

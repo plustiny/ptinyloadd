@@ -179,7 +179,7 @@ json_t *job_to_json(uint32_t max, Job_status status){
             SET_FIELD(o, "script", "s?", job->scriptfile);
             SET_FIELD(o, "post", "s?", job->post);
             SET_FIELD(o, "line", "s?", job->line);
-            SET_FIELD(o, "err", "i", job->err);
+            SET_FIELD(o, "ec", "i", job->ec);
             SET_FIELD(o, "status", "i", job->status);
             json_array_append_new(ary, o);
         }        
@@ -235,7 +235,7 @@ void job_load(){
         job->scriptfile = json_str_val(obj, "script");
         job->post = json_str_val(obj, "post");
         job->line = json_str_val(obj, "line");
-        job->err = json_integer_value(json_object_get(obj,"err"));
+        job->ec = json_integer_value(json_object_get(obj,"ec"));
         job->status = json_integer_value(json_object_get(obj,"status"));
         job_add(job);
     }
