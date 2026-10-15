@@ -2,7 +2,7 @@
 # @name					ytdl
 # @description	download video from youtube
 # @match 				"http[s]?://[^/]*(twimg|nico|youtu|x\.com|bilibili)[^\s]+"
-if command -v yt-dlp >/dev/null; then
+if ! command -v yt-dlp >/dev/null; then
 	echo yt-dlp is not installed.
 	exit 1
 fi

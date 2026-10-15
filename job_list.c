@@ -154,7 +154,7 @@ static json_t *json_from_field(char *fmt, ...){
         return v;
     }else{
         DBG("json error %s \n", json_error.text);
-        return json_string("json invalid");
+        return json_string(json_error.text);
     }
 }
 #define SET_FIELD(o, key, fmt, field)   do{\
