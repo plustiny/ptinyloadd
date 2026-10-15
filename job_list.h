@@ -1,10 +1,12 @@
 #pragma once
 #include <jansson.h>
 #include <stdint.h>
+#include <stdatomic.h>
 
 #define JOB_LINE_LENGTH 256
 
 typedef enum Job_status {
+    all = -1,
     none = 0,
     unprocessed = 1,
     processing = 2,
@@ -14,7 +16,6 @@ typedef enum Job_status {
     canceled = 32,
     delete = 64,
     deleted = 128,
-    all = 255,
 } Job_status;
 
 struct Job {
@@ -23,7 +24,7 @@ struct Job {
     char *line;
     char *scriptfile;
     int  err;
-    Job_status status;
+    _Atomic Job_status status;
 		struct Job *next;
 };
 typedef struct Job Job_t;

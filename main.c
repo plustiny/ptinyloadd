@@ -96,7 +96,7 @@ static void *worker(void *arg){
     for(;;){
         DBG(" > job_next.\n");
         Job_t *job = job_next();
-        job->status = processing;
+        atomic_store(&(job->status), processing);
         job_clear_line(job);
 
         DBG(" > forke.\n");
@@ -152,22 +152,22 @@ static void *worker(void *arg){
         }
         if(job->status == processing){
             waitpid(pid, &(job->err), WNOHANG);
-            job->status = finished;
+            atomic_store(&(job->status), finished);
         }
         if(job->status == cancel){
             if(gently_kill(pid, &(job->err)))   goto ERROR;
-            job->status = canceled;
+            atomic_store(&(job->status), canceled);
         }
         if(job->status == delete){
             if(gently_kill(pid, &(job->err)))   goto ERROR;
-            job->status = deleted;
+            atomic_store(&(job->status), deleted);
         }
         DBG(" > script's exit status = %d\n", job->err);
         continue;
 ERROR:
         printf("❌ ERROR! at job %s %s.\n", job->scriptfile, job->post);
         perror("error");
-        job->status = error;
+        atomic_store(&(job->status), error);
     }
 }
 

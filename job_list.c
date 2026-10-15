@@ -1,4 +1,5 @@
 #include <string.h>
+#include <stdarg.h>
 #include <pthread.h>
 #include "debug.h"
 #include "config.h"
@@ -143,23 +144,38 @@ static char *json_str_val(json_t *obj, char *key){
         return s? strdup(s): NULL;
 }
 
-json_t *job_to_json(uint32_t max, Job_status status){
+static json_t *json_from_field(char *fmt, ...){
     json_error_t json_error;
+    va_list ap;
+    va_start(ap, fmt);
+    json_t *v = json_vpack_ex(&json_error, 0, fmt, ap);
+    va_end(ap);
+    if(v){
+        return v;
+    }else{
+        DBG("json error %s \n", json_error.text);
+        return json_string("json invalid");
+    }
+}
+#define SET_FIELD(o, key, fmt, field)   do{\
+    json_t *v =json_from_field(fmt, field);\
+    json_object_set_new(o, key, v);\
+}while(0);
+
+json_t *job_to_json(uint32_t max, Job_status status){
     json_t *ary = json_array();
     Job_t *job = job_head;
     while(job){
         if(max-- == 0 )
             break;
         if(job->status & status){
-            json_t *o = json_pack_ex(&json_error, 0,
-                    "{s:s?, s:s?, s:s?, s:s?, s:i, s:i}",
-                    "id", job->id,
-                    "script", job->scriptfile,
-                    "post", job->post,
-                    "line", job->line,
-                    "err", job->err,
-                    "status", job->status);
-            if(o == NULL)   DBG("json error %s \n", json_error.text);
+            json_t *o = json_object();
+            SET_FIELD(o, "id", "s?", job->id);
+            SET_FIELD(o, "script", "s?", job->scriptfile);
+            SET_FIELD(o, "post", "s?", job->post);
+            SET_FIELD(o, "line", "s?", job->line);
+            SET_FIELD(o, "err", "i", job->err);
+            SET_FIELD(o, "status", "i", job->status);
             json_array_append_new(ary, o);
         }        
         job = job->next;
@@ -228,9 +244,12 @@ void job_change_status(const char *id, Job_status status, Job_status proc, Job_s
         if((id == NULL && (job->status & status)) || strcmp(job->id, id)==0){
             DBG(" > change it!\n");
             if(job->status == processing){
-                job->status = proc;
+                //job->status = proc;
+                Job_status expected = processing;
+                atomic_compare_exchange_strong(&(job->status), &expected, proc);
             }else{
-                job->status = wait;
+                //job->status = wait;
+                atomic_store(&(job->status), wait);
             }
         }
         job = job->next;

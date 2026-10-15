@@ -16,7 +16,7 @@ Restart=always
 # more harden
 InaccessiblePaths=/home
 NoNewPrivileges=yes
-PrivateTmp=yes
+# PrivateTmp=yes
 PrivateDevices=yes
 DevicePolicy=closed
 ProtectHome=yes
