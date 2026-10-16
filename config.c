@@ -50,10 +50,12 @@ static int enabled(char *env){
 
 void config_load(){
     conf.debug = enabled("DEBUG");
+    DBG("DEBUG: %d\n", conf.debug);
     char *port = getenv("PORT");
     if(port){
         conf.port = atoi(port);
     }
+    DBG("PORT: %d\n", conf.port);
     if(getenv("NAME"))  conf.name = getenv("NAME");
     char *pw = getenv("PASSWD");
     if(pw){
@@ -72,10 +74,14 @@ void config_load(){
     }else{
         setenv("DL_DIR", conf.dl_dir, 0);
     }
-    if(getenv("SCRIPT_DIR"))    conf.script_dir = getenv("SCRIPT_DIR");
+    if(getenv("SCRIPT_DIR"))
+        conf.script_dir = getenv("SCRIPT_DIR");
     conf.cert = load_file(getenv("CERT"));
+    DBG("CERT: %.28s\n", conf.cert);
     conf.key = load_file(getenv("KEY"));
+    DBG("KEY: %.28s\n", conf.key);
     conf.force_https = enabled("FORCE_HTTPS");
+    DBG("FORCE_HTTPS: %d\n", conf.force_https); 
     return;
 }
 

@@ -484,7 +484,6 @@ int main(void) {
     signal(SIGINT, sig_handler);
     signal(SIGTERM, sig_handler);
     signal(SIGSEGV, sig_handler);
-    setvbuf(stdout, NULL, _IONBF, 0);
     
     DBG("config_load()\n");
     config_load();
@@ -501,7 +500,8 @@ int main(void) {
     DBG("conf.cert %.5s\n", conf.cert);
     DBG("conf.key  %.5s\n", conf.key);
     DBG("start MHD daemon\n");
-    struct MHD_Daemon *d;
+    char mes[256] = {0};
+    struct MHD_Daemon *d = NULL;
     if (conf.cert && conf.key) {
         d = MHD_start_daemon(
             MHD_USE_INTERNAL_POLLING_THREAD | MHD_USE_TLS,
@@ -513,10 +513,9 @@ int main(void) {
             MHD_OPTION_EXTERNAL_LOGGER, &logger, NULL,
             MHD_OPTION_END
         );
-        printf("start https server. waiting at :%d\n", conf.port);
+        snprintf(mes, sizeof mes, "start https server. waiting at :%d\n", conf.port);
     } else if(conf.force_https){
-        printf("failed to start https server.\n");
-        return 1;
+        snprintf(mes, sizeof mes, "FORCE_HTTPS=yes. stop starting https server.\n");
     }else {
         d = MHD_start_daemon(
             MHD_USE_INTERNAL_POLLING_THREAD,
@@ -526,13 +525,21 @@ int main(void) {
             MHD_OPTION_EXTERNAL_LOGGER, &logger, NULL,
             MHD_OPTION_END
         );
-        printf("start http server. waiting at :%d .\n", conf.port);
+        snprintf(mes, sizeof mes, "start http server. waiting at :%d .\n", conf.port);
     }
 
     if (!d) {
         printf("failed to start server.\n");
+        if(strlen(mes)){
+            fprintf(stderr, "%s", mes);
+        }
+        fflush(stdout);
+        fflush(stderr);
         return 1;
     }
+    printf("%s", mes);
+    fflush(stdout);
+    fflush(stderr);
 
     while(_running){
         pause();
