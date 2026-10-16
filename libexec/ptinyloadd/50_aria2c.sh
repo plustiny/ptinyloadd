@@ -1,7 +1,7 @@
 #!/bin/bash
 # @name					aria2c
 # @description	download torrent/magnet
-# @match 				"(^http[s]?://[^\s]+\.torrent|^magnet:[^\s]+)"
+# @match 				"(.torrent$|^magnet:)"
 require() {
     command -v "$1" >/dev/null 2>&1 || {
         echo "Error: command not found: $1" >&2
