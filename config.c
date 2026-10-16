@@ -40,8 +40,16 @@ ERROR:
     return NULL;
 }
 
+static int enabled(char *env){
+    char *s = getenv(env);
+    if( s && (s[0] == 'n' || s[0] == 'N' || s[0] == '0')){
+        return 0;
+    }
+    return 1;
+}
+
 void config_load(){
-    conf.debug = getenv("DEBUG")? 1 : 0;
+    conf.debug = enabled("DEBUG");
     char *port = getenv("PORT");
     if(port){
         conf.port = atoi(port);
@@ -67,7 +75,7 @@ void config_load(){
     if(getenv("SCRIPT_DIR"))    conf.script_dir = getenv("SCRIPT_DIR");
     conf.cert = load_file(getenv("CERT"));
     conf.key = load_file(getenv("KEY"));
-    conf.force_https = getenv("FORCE_HTTPS")? 1: 0;
+    conf.force_https = enabled("FORCE_HTTPS");
     return;
 }
 
