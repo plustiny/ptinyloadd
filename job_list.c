@@ -67,7 +67,8 @@ static Job_t *job_free(Job_t *job){
     return next;
 }
 
-static void job_clean(){
+ void job_clean(){
+    DBG(" in job_clean\n");
     Job_t *job = job_head;
     while(job){
         if(job->status != deleted)
@@ -75,11 +76,13 @@ static void job_clean(){
         job = job_free(job);
     }
     if(job == NULL){
+        DBG(" job list is empty now.\n");
         job_head = NULL;
         job_tail = NULL;
         id_reset();
         return;
     }
+    DBG(" new job_head found.\n");
     job_head = job;
 
     Job_t *tail = job_head;
@@ -94,7 +97,15 @@ static void job_clean(){
         }
     }
     job_tail = tail;
+    DBG(" new job_tail found.\n");
     job_tail->next = NULL;
+}
+
+int job_status_changed(){
+    pthread_mutex_lock(&job_mutex);
+    pthread_cond_signal(&job_cond);
+    pthread_mutex_unlock(&job_mutex);
+    return 0;
 }
 
 int job_register(char *post, char *scriptfile){
@@ -241,24 +252,25 @@ void job_load(){
     }
 }
 
-void job_change_status(const char *id, Job_status status, Job_status proc, Job_status wait){
+void job_change_status(const char *id, Job_status status, Job_status running, Job_status waiting){
     DBG(" > lets change id=%s, status=%d.\n", id, status);
     Job_t *job = job_head;
     while(job){
         DBG(" > job->id=%s, job->status=%d.\n",job->id, job->status);
-        if((id == NULL && (job->status & status)) || strcmp(job->id, id)==0){
+        if((id == NULL && (job->status & status))
+                || (id != NULL && strncmp(job->id, id, strlen(id))==0)){
             DBG(" > change it!\n");
             if(job->status == processing){
-                //job->status = proc;
                 Job_status expected = processing;
-                atomic_compare_exchange_strong(&(job->status), &expected, proc);
+                atomic_compare_exchange_strong(&(job->status), &expected, running);
             }else{
-                //job->status = wait;
-                atomic_store(&(job->status), wait);
+                atomic_store(&(job->status), waiting);
             }
         }
         job = job->next;
     }
+    DBG(" job status changed");
+    job_status_changed();
 }
 
 void job_clear_line(Job_t *job){

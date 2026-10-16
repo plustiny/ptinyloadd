@@ -83,20 +83,22 @@ void script_load(){
         return;
     }
     for(int i = 0; i < nfiles; i++){
+        FILE *f = NULL;
+        script_t *e = NULL;
         char *file = files[i];
         char path[1024];
         char line[1024];
-        script_t *e = calloc(1, sizeof(script_t));
+        e = calloc(1, sizeof(script_t));
         if(e == NULL){
             printf("❌ ERROR! memory allocation failed at script_load().\n");
-            return;
+            goto ERROR;
         }
         e->scriptfile = file;
         snprintf(path, sizeof(path), "%s/%s", conf.script_dir, file);
-        FILE *f = fopen(path, "rb");
+        f = fopen(path, "rb");
         if(!f){
             printf("%s is not file. SKIP\n", file);
-            continue;
+            goto ERROR;
         }
         while (fgets(line, sizeof line, f)) {
             DBG("file: %s, line: %s", file, line);
@@ -130,8 +132,13 @@ void script_load(){
                 }
             }
         }
-        printf("add script. name: %s, file: %s\n", e->name, e->scriptfile);
+        if(f)   fclose(f);
         script_add(e);
+        printf("add script. name: %s, file: %s\n", e->name, e->scriptfile);
+        continue;
+ERROR:
+        if(f)   fclose(f);
+        if(e)   free(e);
     }
     return;
 }

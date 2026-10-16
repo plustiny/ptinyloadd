@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include "debug.h"
 #include "config.h"
 
@@ -13,36 +14,37 @@ Config conf = {
 };
 
 static char *load_file(const char *path){
-    FILE *fp = fopen(path, "rb");
-    if (!fp) return NULL;
+    FILE *fp = NULL;
+    char *buf = NULL;
+    if(!path)   goto ERROR;
+    fp = fopen(path, "rb");
+    if (!fp)    goto ERROR;
     
     size_t size;
-    char *buf;
     fseek(fp, 0, SEEK_END);
     size = ftell(fp);
     rewind(fp);
+    if(errno)   goto ERROR;
 
-    buf = malloc((size_t)size + 1);
-    if (!buf) {
-        fclose(fp);
-        return NULL;
-    }
+    buf = malloc(size + 1);
+    if (!buf)   goto ERROR;
 
-    if (fread(buf, 1, (size_t)size, fp) != (size_t)size) {
-        free(buf);
-        fclose(fp);
-        return NULL;
-    }
+    if (fread(buf, 1, size + 1, fp) != size) goto ERROR;
 
     buf[size] = '\0';
     fclose(fp);
     return buf;
+ERROR:
+    if(fp)  fclose(fp);
+    if(buf) free(buf);
+    return NULL;
 }
 
 void config_load(){
     conf.debug = getenv("DEBUG")? 1 : 0;
-    if(getenv("PORT")){
-        conf.port = atoi(getenv("PORT"));
+    char *port = getenv("PORT");
+    if(port){
+        conf.port = atoi(port);
     }
     if(getenv("NAME"))  conf.name = getenv("NAME");
     char *pw = getenv("PASSWD");

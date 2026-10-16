@@ -19,6 +19,9 @@
 #include "script_list.h"
 #include "metadata.h"
 
+#define GET "GET"
+#define POST "POST"
+
 static enum MHD_Result _debug_print_header_inner(void *cls, enum MHD_ValueKind kind,
         const char *key, const char *value){
     (void)cls;(void)kind;
@@ -33,6 +36,8 @@ static void _debug_print_header(struct MHD_Connection *connection){
 
 
 static int gently_kill(pid_t pid, int *exit_status){
+    pid_t r = waitpid(pid, exit_status, WNOHANG);
+    if(r == pid) return 0;
     if(kill(pid, SIGTERM))  return -1;
     for(int i=0; i<30; i++){
         pid_t r = waitpid(pid, exit_status, WNOHANG);
@@ -151,22 +156,20 @@ static void *worker(void *arg){
             }
         }
         int status;
-        if(job->status == processing){
-            waitpid(pid, &status, WNOHANG);
-            job->ec = WEXITSTATUS(status);
-            atomic_store(&(job->status), finished);
-        }
-        if(job->status == cancel){
-            int err = gently_kill(pid, &status);
-            job->ec = WEXITSTATUS(status);
-            if(err) goto ERROR;
-            atomic_store(&(job->status), canceled);
-        }
-        if(job->status == delete){
-            int err = gently_kill(pid, &status);
-            job->ec = WEXITSTATUS(status);
-            if(err) goto ERROR;
-            atomic_store(&(job->status), deleted);
+        if(gently_kill(pid, &status))   goto ERROR;
+        job->ec = WEXITSTATUS(status);
+        switch(job->status){
+            case processing:
+                atomic_store(&(job->status), finished);
+                break;
+            case cancel:
+                atomic_store(&(job->status), canceled);
+                break;
+            case delete:
+                atomic_store(&(job->status), deleted);
+                break;
+            default:
+                goto ERROR;
         }
         DBG(" > script's exit code = %d\n", job->ec);
         continue;
@@ -323,16 +326,19 @@ static enum MHD_Result ahc(void *cls,
         return http_response(c, MHD_HTTP_UNAUTHORIZED);
     }
     DBG(" > auth OK.\n");
-    if(!method) DBG(" > method is null\n");
+    if(!method){
+        DBG(" > method is null\n");
+        return http_response(c, MHD_HTTP_BAD_REQUEST);
+    }
     DBG(" > method: %s\n", method);
 
-    if (strcmp(method, "GET") == 0){
+    if (strncmp(method, GET, sizeof GET) == 0){
         DBG(" > GET\n");
         const char *query = MHD_lookup_connection_value(c, MHD_GET_ARGUMENT_KIND, "query");
         const char *id    = MHD_lookup_connection_value(c, MHD_GET_ARGUMENT_KIND,"id");
         const char *status= MHD_lookup_connection_value(c, MHD_GET_ARGUMENT_KIND,"status");
         const char *max   = MHD_lookup_connection_value(c, MHD_GET_ARGUMENT_KIND,"max");
-        int s = (int)all;
+        int s = (int)(~deleted);
         if(status){
             s = atoi(status);
         }
@@ -440,7 +446,7 @@ static enum MHD_Result ahc(void *cls,
     }
     
     DBG(" > check post has data.\n");
-    if( post == NULL || strlen(post) == 0 ){
+    if( post == NULL ){
         printf("⚠ post is null. %s\n", post);
         return http_response(c, MHD_HTTP_BAD_REQUEST);
     }
@@ -462,7 +468,12 @@ static enum MHD_Result ahc(void *cls,
         return http_response(c, MHD_HTTP_ACCEPTED);
     }
 }
-    
+
+static void logger(void *cls, const char *fmt, va_list ap) {
+    (void)cls;
+    vfprintf(stderr, fmt, ap);
+    fputc('\n', stderr);
+}    
 static volatile sig_atomic_t _running = 1;
 static void sig_handler(int sig) {
     (void)sig;
@@ -499,6 +510,7 @@ int main(void) {
             &ahc, NULL,
             MHD_OPTION_HTTPS_MEM_CERT, conf.cert,
             MHD_OPTION_HTTPS_MEM_KEY,  conf.key,
+            MHD_OPTION_EXTERNAL_LOGGER, &logger, NULL,
             MHD_OPTION_END
         );
         printf("start https server. waiting at :%d\n", conf.port);
@@ -511,6 +523,7 @@ int main(void) {
             conf.port,
             NULL, NULL,
             &ahc, NULL,
+            MHD_OPTION_EXTERNAL_LOGGER, &logger, NULL,
             MHD_OPTION_END
         );
         printf("start http server. waiting at :%d .\n", conf.port);
