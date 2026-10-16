@@ -37,6 +37,8 @@ install: all
 	cp -f ptinyloadd.service /etc/systemd/system/
 	chown -R ptinyload:share $(PREFIX)/etc/ptinyloadd/
 	chown -R ptinyload:share $(PREFIX)/libexec/ptinyloadd/
+
+service:
 	systemctl daemon-reload
 	systemctl enable ptinyloadd
 	systemctl start ptinyloadd

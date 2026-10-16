@@ -23,7 +23,7 @@ sudo make install
 
 sudo ln -s /etc/letsencrypt/live/(YOUR_SERVER)/privkey.pem /usr/local/etc/ptinyloadd/privkey.pem
 sudo ln -s /etc/letsencrypt/live/(YOUR_SERVER)/fullchain.pem /usr/local/etc/ptinyloadd/fullchain.pem
-sudo systemctl restart ptinyloadd
+sudo make service
 ```
 
 ### Client (Android)
