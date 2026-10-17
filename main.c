@@ -141,7 +141,7 @@ static void *worker(void *arg){
             LINE();
             struct timeval tv;
             tv.tv_sec = 0;
-            tv.tv_usec = 1'000'000; //[us]
+            tv.tv_usec = 1'000'000; //1s
 
             LINE();
             fd_set rfds;
@@ -369,7 +369,7 @@ static enum MHD_Result ahc(void *cls,
         const char *id    = MHD_lookup_connection_value(c, MHD_GET_ARGUMENT_KIND,"id");
         const char *status= MHD_lookup_connection_value(c, MHD_GET_ARGUMENT_KIND,"status");
         const char *max   = MHD_lookup_connection_value(c, MHD_GET_ARGUMENT_KIND,"max");
-        int s = (int)(~deleted);
+        unsigned int s = (unsigned int)(~deleted);
         if(status){
             s = atoi(status);
         }
@@ -504,16 +504,12 @@ static enum MHD_Result ahc(void *cls,
 static volatile sig_atomic_t _running = 1;
 static void sig_handler(int sig) {
     _running = 0;
-
-    write(STDERR_FILENO, MES_CRASH, sizeof MES_CRASH);
+    dprintf(STDERR_FILENO, "=== crash ===\n");
     dprintf(STDERR_FILENO, "signal: %d\n", sig);
-    pthread_t tid = pthread_self();
-    dprintf(STDERR_FILENO, "thread: %lu\n", (unsigned long)tid);
     dprintf(STDERR_FILENO, "line  : %d\n", line);
     void *buf[32];
     int n = backtrace(buf, 32);
     backtrace_symbols_fd(buf, n, STDERR_FILENO);
-    _exit(128 + sig);
 }
 
 int main(void) {

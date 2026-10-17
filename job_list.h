@@ -6,7 +6,7 @@
 #define JOB_LINE_LENGTH 512
 
 typedef enum Job_status {
-    all = -1,
+    all = (unsigned int)-1,
     none = 0,
     unprocessed = 1,
     processing = 2,
