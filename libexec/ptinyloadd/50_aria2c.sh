@@ -15,8 +15,6 @@ url="$@"
 aria2c -d "${DL_DIR}" \
     -c \
     --allow-overwrite=true \
-    --on-download-complete=exit \
-    --on-bt-download-complete=exit \
     --seed-time=0 \
     --log-level=error \
     --summary-interval=10 \
