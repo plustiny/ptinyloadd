@@ -14,7 +14,7 @@ all: $(TARGET)
 backup: BackupDir:=$(shell ls -tr1d .backup* 2>/dev/null | tail -1 )
 backup: NewBackupDir:=$(shell date +'.backup_%Y-%m-%d_%H-%M-%S') 
 backup:
-	if [ "x$(BackupDir)" = "x" ];then rsync -av . $(NewBackupDir); else rsync --exclude=".backup*" -av --link-dest=../$(BackupDir) . $(NewBackupDir);fi
+	if [ "x$(BackupDir)" = "x" ];then rsync -av . $(NewBackupDir); else rsync --exclude=".*" -av --link-dest=../$(BackupDir) . $(NewBackupDir);fi
 
 $(TARGET): $(SRC)
 	$(CC) $(CFLAGS)  $(SRC) $(LDFLAGS) -o $(TARGET)

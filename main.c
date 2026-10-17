@@ -192,10 +192,10 @@ static void *worker(void *arg){
             case processing:
                 atomic_store(&(job->status), finished);
                 break;
-            case cancel:
+            case canceling:
                 atomic_store(&(job->status), canceled);
                 break;
-            case delete:
+            case deleting:
                 atomic_store(&(job->status), deleted);
                 break;
             default:
@@ -212,18 +212,18 @@ ERROR:
 }
 
 static void query_restart(const char *id, Job_status status){
-    DBG(" in query_cancel.\n");
+    DBG(" in query_restart.\n");
     job_change_status(id, status, unprocessed, processing);
 }
 
 static void query_cancel(const char *id, Job_status status){
     DBG(" in query_cancel.\n");
-    job_change_status(id, status, cancel, canceled);
+    job_change_status(id, status, canceling, canceled);
 }
 
 static void query_delete(const char *id, Job_status status){
     DBG(" in query_delete.\n");
-    job_change_status(id, status, delete, deleted);
+    job_change_status(id, status, deleting, deleted);
 }
 
 static char *query_select(uint32_t max, Job_status status){

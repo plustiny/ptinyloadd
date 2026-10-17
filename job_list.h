@@ -12,9 +12,9 @@ typedef enum Job_status {
     processing = 2,
     finished = 4,
     error = 8,
-    cancel = 16,
+    canceling = 16,
     canceled = 32,
-    delete = 64,
+    deleting = 64,
     deleted = 128,
 } Job_status;
 

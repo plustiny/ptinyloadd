@@ -1,7 +1,7 @@
 #!/bin/bash
-# @name					test
-# @description	test
-# @match				^test_.*
+# @name		test
+# @description		test
+# @match		^test_.*
 echo $1
 sleep 1
 echo very
