@@ -227,7 +227,7 @@ static void query_delete(const char *id, Job_status status){
 }
 
 static char *query_select(uint32_t max, Job_status status){
-    DBG(" in query_select.\n");
+    DBG(" in query_select. %u %u\n",max, status);
     json_t *ary = job_to_json(max, status);
     DBG(" json > json_dumps\n");
     char *ret = json_dumps(ary, JSON_INDENT(0));
@@ -369,7 +369,7 @@ static enum MHD_Result ahc(void *cls,
         const char *id    = MHD_lookup_connection_value(c, MHD_GET_ARGUMENT_KIND,"id");
         const char *status= MHD_lookup_connection_value(c, MHD_GET_ARGUMENT_KIND,"status");
         const char *max   = MHD_lookup_connection_value(c, MHD_GET_ARGUMENT_KIND,"max");
-        unsigned int s = (unsigned int)(~deleted);
+        Job_status s = (unsigned int)(~deleted);
         if(status){
             s = atoi(status);
         }
@@ -397,7 +397,7 @@ static enum MHD_Result ahc(void *cls,
         }
         if(query && strcmp(query,"select")==0){
             DBG(" > query select max=%u,status=%d.\n", m, s);
-            dst = query_select(s, m);
+            dst = query_select(m, s);
         }
         if(query && strcmp(query,"meta")==0){
             DBG(" > query meta.\n");
