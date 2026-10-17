@@ -106,23 +106,26 @@ static void *worker(void *arg){
         DBG(" > job_next.\n");LINE();
         Job_t *job = job_next();
         atomic_store(&(job->status), processing);
-        job_clear_line(job);
+        job_clear_buf(job);
 
         DBG(" > forke.\n");LINE();
-        int pipefd[2];
+        char pathname[1024];
+        snprintf(pathname, sizeof pathname, "%s/%s", conf.script_dir, job->scriptfile);
+        DBG(" pathname = %s\n",pathname);
+        int outfd[2], errfd[2];
         pid_t pid;
-        if (pipe(pipefd) == -1) goto ERROR;
+        if (pipe(outfd) == -1) goto ERROR;
+        if (pipe(errfd) == -1) goto ERROR;
         pid = fork();
         if (pid == -1) goto ERROR;
         if (pid == 0) {
             DBG(" forked in.\n");
-            close(pipefd[0]);
-            dup2(pipefd[1], STDOUT_FILENO);
-            dup2(pipefd[1], STDERR_FILENO);
-            close(pipefd[1]);
-            char pathname[1024];
-            snprintf(pathname, sizeof pathname, "%s/%s", conf.script_dir, job->scriptfile);
-            DBG(" pathname = %s\n",pathname);
+            close(outfd[0]);
+            close(errfd[0]);
+            dup2(outfd[1], STDOUT_FILENO);
+            dup2(errfd[1], STDERR_FILENO);
+            close(outfd[1]);
+            close(errfd[1]);
             int err = execl(pathname, job->scriptfile, job->post, NULL);
             if(err){
                 printf("❌ ERROR! at execl.\n");
@@ -132,40 +135,54 @@ static void *worker(void *arg){
         }
 
         DBG(" > forked.\n");LINE();
-        close(pipefd[1]);
+        close(outfd[1]);
+        close(errfd[1]);
         while(job->status == processing){
             LINE();
-            //DBG(" > job processing %s.\n",job->scriptfile);
-            fd_set rfds;
             struct timeval tv;
-
-            LINE();
-            FD_ZERO(&rfds);
-            FD_SET(pipefd[0], &rfds);
-
-            LINE();
             tv.tv_sec = 0;
-            tv.tv_usec = 200000; // 200ms
+            tv.tv_usec = 1'000'000; //[us]
 
             LINE();
-            int ret = select(pipefd[0] + 1, &rfds, NULL, NULL, &tv);
+            fd_set rfds;
+            FD_ZERO(&rfds);
+            FD_SET(outfd[0], &rfds);
+            FD_SET(errfd[0], &rfds);
+
+            LINE();
+            int maxfd = outfd[0] > errfd[0] ? outfd[0] : errfd[0];
+            int ret = select(maxfd + 1, &rfds, NULL, NULL, &tv);
             if (ret == -1) goto ERROR;
-            if (ret == 0) {
-                continue; // timeout
-            }
+            if (ret == 0 ) continue;//timeout
 
             LINE();
-            if (FD_ISSET(pipefd[0], &rfds)) {
-                ssize_t n = read(pipefd[0], job->line, JOB_LINE_LENGTH - 1);
+            if (outfd[0] != -1 && FD_ISSET(outfd[0], &rfds)) {
+                ssize_t n = read(outfd[0], job->out, JOB_LINE_LENGTH - 1);
                 if (n > 0) {
-                    job->line[n] = '\0';
+                    job->out[n] = '\0';
+                } else if ( n == 0 ){
+                   close(outfd[0]);
+                   outfd[0] = -1;
                 } else {
-                    break; // EOF
+                    goto ERROR;
                 }
-                DBG(" > %s: %s", job->scriptfile, job->line);
             }
+            LINE();
+            if (errfd[0] != -1 && FD_ISSET(errfd[0], &rfds)) {
+                ssize_t n = read(errfd[0], job->err, JOB_LINE_LENGTH - 1);
+                if (n > 0) {
+                    job->err[n] = '\0';
+                } else if ( n == 0 ){
+                   close(errfd[0]);
+                   errfd[0] = -1;
+                } else {
+                    goto ERROR;
+                }
+            }
+            LINE();
+            if(outfd[0] == -1 && errfd[0] == -1)
+                break;//EOF
         }
-
         LINE();
         int status;
         if(gently_kill(pid, &status))   goto ERROR;

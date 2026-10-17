@@ -60,7 +60,8 @@ static Job_t *job_free(Job_t *job){
     job->status = none;
     free(job->id);
     free(job->post);
-    free(job->line);
+    free(job->out);
+    free(job->err);
     free(job->scriptfile);
     free(job);
     DBG(" out job_free()\n");
@@ -120,8 +121,8 @@ int job_register(char *post, char *scriptfile){
         job->scriptfile = strdup(scriptfile);
         job->status = unprocessed;
     }else{
-        job_clear_line(job);
-        job->line = strdup("don't match any script.");
+        job_clear_buf(job);
+        job->err = strdup("don't match any script.");
         job->status = canceled;
     }
     job_add(job);
@@ -187,11 +188,12 @@ json_t *job_to_json(uint32_t max, Job_status status){
         if(job->status & status){
             json_t *o = json_object();
             SET_FIELD(o, "id", "s?", job->id);
-            SET_FIELD(o, "script", "s?", job->scriptfile);
-            SET_FIELD(o, "post", "s?", job->post);
-            SET_FIELD(o, "line", "s?", job->line);
             SET_FIELD(o, "ec", "i", job->ec);
             SET_FIELD(o, "status", "i", job->status);
+            SET_FIELD(o, "script", "s?", job->scriptfile);
+            SET_FIELD(o, "post", "s?", job->post);
+            SET_FIELD(o, "out", "s?", job->out);
+            SET_FIELD(o, "err", "s?", job->err);
             json_array_append_new(ary, o);
         }        
         job = job->next;
@@ -245,7 +247,8 @@ void job_load(){
         job->id = json_str_val(obj, "id");
         job->scriptfile = json_str_val(obj, "script");
         job->post = json_str_val(obj, "post");
-        job->line = json_str_val(obj, "line");
+        job->out = json_str_val(obj, "out");
+        job->err = json_str_val(obj, "err");
         job->ec = json_integer_value(json_object_get(obj,"ec"));
         job->status = json_integer_value(json_object_get(obj,"status"));
         job_add(job);
@@ -273,14 +276,19 @@ void job_change_status(const char *id, Job_status status, Job_status running, Jo
     job_status_changed();
 }
 
-void job_clear_line(Job_t *job){
+void job_clear_buf(Job_t *job){
     if(!job){
         DBG(" job is null.\n");
     }
-    if(job->line){
-        memset(job->line, 0, sizeof(char) * JOB_LINE_LENGTH);
+    if(job->out){
+        memset(job->out, 0, sizeof(char) * JOB_LINE_LENGTH);
     }else{
-        job->line = calloc(JOB_LINE_LENGTH, sizeof(char));
+        job->out = calloc(JOB_LINE_LENGTH, sizeof(char));
+    }
+    if(job->err){
+        memset(job->err, 0, sizeof(char) * JOB_LINE_LENGTH);
+    }else{
+        job->err = calloc(JOB_LINE_LENGTH, sizeof(char));
     }
 }
 

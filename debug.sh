@@ -7,7 +7,7 @@ export PASSWD=bar
 export PASSWD_MD5=37b51d194a7513e45b56f6524f2d51f2
 export DL_DIR=/var/tmp/
 export SCRIPT_DIR=./libexec/ptinyloadd
-export FORCE_HTTPS=yes
+export FORCE_HTTPS=no
 KEYFILE=/etc/letsencrypt/live/*/privkey.pem
 CERTFILE=/etc/letsencrypt/live/*/fullchain.pem
 [ -e $KEYFILE ] && ln -s $KEYFILE ./
