@@ -12,6 +12,7 @@
 #include <ctype.h>
 #include <math.h>
 #include <openssl/md5.h>
+#include <execinfo.h>
 #include <zlib.h>
 #include "debug.h"
 #include "config.h"
@@ -21,6 +22,9 @@
 
 #define GET "GET"
 #define POST "POST"
+
+#define LINE()    do{line = __LINE__;}while(0);
+static int line = 0;
 
 static enum MHD_Result _debug_print_header_inner(void *cls, enum MHD_ValueKind kind,
         const char *key, const char *value){
@@ -99,12 +103,12 @@ static void *worker(void *arg){
     (void)arg;
     DBG(" in worker.\n");
     for(;;){
-        DBG(" > job_next.\n");
+        DBG(" > job_next.\n");LINE();
         Job_t *job = job_next();
         atomic_store(&(job->status), processing);
         job_clear_line(job);
 
-        DBG(" > forke.\n");
+        DBG(" > forke.\n");LINE();
         int pipefd[2];
         pid_t pid;
         if (pipe(pipefd) == -1) goto ERROR;
@@ -127,24 +131,30 @@ static void *worker(void *arg){
             _exit(1);
         }
 
-        DBG(" > forked.\n");
+        DBG(" > forked.\n");LINE();
         close(pipefd[1]);
         while(job->status == processing){
+            LINE();
             //DBG(" > job processing %s.\n",job->scriptfile);
             fd_set rfds;
             struct timeval tv;
 
+            LINE();
             FD_ZERO(&rfds);
             FD_SET(pipefd[0], &rfds);
 
+            LINE();
             tv.tv_sec = 0;
             tv.tv_usec = 200000; // 200ms
 
+            LINE();
             int ret = select(pipefd[0] + 1, &rfds, NULL, NULL, &tv);
             if (ret == -1) goto ERROR;
             if (ret == 0) {
                 continue; // timeout
             }
+
+            LINE();
             if (FD_ISSET(pipefd[0], &rfds)) {
                 ssize_t n = read(pipefd[0], job->line, JOB_LINE_LENGTH - 1);
                 if (n > 0) {
@@ -155,9 +165,12 @@ static void *worker(void *arg){
                 DBG(" > %s: %s", job->scriptfile, job->line);
             }
         }
+
+        LINE();
         int status;
         if(gently_kill(pid, &status))   goto ERROR;
         job->ec = WEXITSTATUS(status);
+        LINE();
         switch(job->status){
             case processing:
                 atomic_store(&(job->status), finished);
@@ -171,9 +184,10 @@ static void *worker(void *arg){
             default:
                 goto ERROR;
         }
-        DBG(" > script's exit code = %d\n", job->ec);
+        DBG(" > script's exit code = %d\n", job->ec);LINE();
         continue;
 ERROR:
+        LINE();
         printf("❌ ERROR! at job %s %s.\n", job->scriptfile, job->post);
         perror("error");
         atomic_store(&(job->status), error);
@@ -469,29 +483,35 @@ static enum MHD_Result ahc(void *cls,
     }
 }
 
-static void logger(void *cls, const char *fmt, va_list ap) {
-    (void)cls;
-    vfprintf(stderr, fmt, ap);
-    fputc('\n', stderr);
-}    
 static volatile sig_atomic_t _running = 1;
 static void sig_handler(int sig) {
-    (void)sig;
     _running = 0;
+    pthread_t tid = pthread_self();
+    dprintf(STDERR_FILENO, "=== crash ===\n");
+    dprintf(STDERR_FILENO, "signal: %d\n", sig);
+    dprintf(STDERR_FILENO, "thread: %lu\n", (unsigned long)tid);
+    dprintf(STDERR_FILENO, "line  : %d\n", line);
+    void *buf[32];
+    int n = backtrace(buf, 32);
+    backtrace_symbols_fd(buf, n, STDERR_FILENO);
+    _exit(128 + sig);
 }
 
 int main(void) {
     signal(SIGINT, sig_handler);
     signal(SIGTERM, sig_handler);
     signal(SIGSEGV, sig_handler);
-    
+ 
     DBG("config_load()\n");
     config_load();
     DBG("script_load()\n");
     script_load();
     DBG("job_load()\n");
     job_load();
-
+    if(conf.debug){
+        setvbuf(stdout, NULL, _IONBF, 0);
+    }
+    
     DBG("create pthread\n");
     pthread_t th;
     pthread_create(&th, NULL, worker, NULL);
@@ -510,7 +530,6 @@ int main(void) {
             &ahc, NULL,
             MHD_OPTION_HTTPS_MEM_CERT, conf.cert,
             MHD_OPTION_HTTPS_MEM_KEY,  conf.key,
-            MHD_OPTION_EXTERNAL_LOGGER, &logger, NULL,
             MHD_OPTION_END
         );
         snprintf(mes, sizeof mes, "start https server. waiting at :%d\n", conf.port);
@@ -522,7 +541,6 @@ int main(void) {
             conf.port,
             NULL, NULL,
             &ahc, NULL,
-            MHD_OPTION_EXTERNAL_LOGGER, &logger, NULL,
             MHD_OPTION_END
         );
         snprintf(mes, sizeof mes, "start http server. waiting at :%d .\n", conf.port);

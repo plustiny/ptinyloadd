@@ -1,19 +1,35 @@
 #!/bin/bash
 # @name					aria2c
 # @description	download torrent/magnet
-# @match 				"(.torrent$|.meta4$|.metalink$|^magnet:)"
+# @match 				"(.torrent$|^magnet:)"
 require() {
     command -v "$1" >/dev/null 2>&1 || {
         echo "Error: command not found: $1" >&2
         exit 1
     }
 }
+on_error(){
+    echo $1 $2 $3
+}
+
 require aria2c
+err=""
 url="$@"
-aria2c -d "${DL_DIR}" --on-download-complete --log-level=info "${url}" 2>&1  | while IFS= read -r line;
+aria2c -d "${DL_DIR}" \
+    --on-download-complete=exit \
+    --on-download-error=on_error \
+    --log-level=error \
+    --summary-interval=10 \
+    "${url}" 2>&1  | while IFS= read -r line;
 do
-	line=${line//=/}
-	line=${line//-/}
-	[ -n "$line" ] && 	printf '%s\n' "$line"
+    if [[ $line == ^Exception ]]; then
+        err=$line
+    fi
+    line=${line//=/}
+    line=${line//-/}
+    [ -n "$line" ] && echo "$line"
 done
-exit ${PIPESTATUS[0]}
+status=${PIPESTATUS[0]}
+[ -n "$err" ] && echo "$err"
+exit $status
+
