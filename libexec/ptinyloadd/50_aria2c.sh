@@ -10,6 +10,7 @@ require() {
 }
 on_error(){
     echo $1 $2 $3
+    rm -f "$3"
 }
 
 require aria2c
@@ -17,6 +18,8 @@ err=""
 url="$@"
 aria2c -d "${DL_DIR}" \
     --on-download-complete=exit \
+    --on-bt-download-complete=exit \
+    --seed-time=0 \
     --on-download-error=on_error \
     --log-level=error \
     --summary-interval=10 \
