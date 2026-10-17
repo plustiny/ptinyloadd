@@ -8,19 +8,16 @@ require() {
         exit 1
     }
 }
-on_error(){
-    echo $1 $2 $3
-    rm -f "$3"
-}
 
 require aria2c
 err=""
 url="$@"
 aria2c -d "${DL_DIR}" \
+    -c \
+    --allow-overwrite=true \
     --on-download-complete=exit \
     --on-bt-download-complete=exit \
     --seed-time=0 \
-    --on-download-error=on_error \
     --log-level=error \
     --summary-interval=10 \
     "${url}" 2>&1  | while IFS= read -r line;
