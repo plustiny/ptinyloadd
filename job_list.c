@@ -221,7 +221,7 @@ void job_unload(){
             "jobs", ary);
     json_dump_file(o, pathname, JSON_INDENT(1));
     json_decref(ary);
-    DBG(" > write job list to %s.\n",pathname);
+    DBG(" > write job list to %s .\n",pathname);
 
     Job_t *job = job_head;
     while(job){
