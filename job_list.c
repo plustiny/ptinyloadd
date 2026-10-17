@@ -186,6 +186,7 @@ json_t *job_to_json(uint32_t max, Job_status status){
         if(max-- == 0 )
             break;
         if(job->status & status){
+            DBG(" job_to_json %d and %d\n",job->status, status);
             json_t *o = json_object();
             SET_FIELD(o, "id", "s?", job->id);
             SET_FIELD(o, "ec", "i", job->ec);

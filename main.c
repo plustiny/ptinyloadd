@@ -365,7 +365,7 @@ static enum MHD_Result ahc(void *cls,
 
     if (strncmp(method, GET, sizeof GET) == 0){
         DBG(" > GET\n");
-        const char *query = MHD_lookup_connection_value(c, MHD_GET_ARGUMENT_KIND, "query");
+        const char *query = MHD_lookup_connection_value(c, MHD_GET_ARGUMENT_KIND,"query");
         const char *id    = MHD_lookup_connection_value(c, MHD_GET_ARGUMENT_KIND,"id");
         const char *status= MHD_lookup_connection_value(c, MHD_GET_ARGUMENT_KIND,"status");
         const char *max   = MHD_lookup_connection_value(c, MHD_GET_ARGUMENT_KIND,"max");
