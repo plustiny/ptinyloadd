@@ -483,10 +483,12 @@ static enum MHD_Result ahc(void *cls,
     }
 }
 
+#define MES_CRASH "=== crash ===\n"
 static volatile sig_atomic_t _running = 1;
 static void sig_handler(int sig) {
     _running = 0;
-    dprintf(STDERR_FILENO, "=== crash ===\n");
+
+    write(STDERR_FILENO, MES_CRASH, sizeof MES_CRASH);
     dprintf(STDERR_FILENO, "signal: %d\n", sig);
     pthread_t tid = pthread_self();
     dprintf(STDERR_FILENO, "thread: %lu\n", (unsigned long)tid);
