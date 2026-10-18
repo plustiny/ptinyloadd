@@ -23,8 +23,8 @@
 #define GET "GET"
 #define POST "POST"
 
-#define LINE()    do{line = __LINE__;}while(0);
-static int line = 0;
+#define LINE()    do{_line = __LINE__;}while(0);
+static int _line = 0;
 
 static enum MHD_Result _debug_print_header_inner(void *cls, enum MHD_ValueKind kind,
         const char *key, const char *value){
@@ -113,10 +113,10 @@ static void *worker(void *arg){
         snprintf(pathname, sizeof pathname, "%s/%s", conf.script_dir, job->scriptfile);
         DBG(" pathname = %s\n",pathname);
         int outfd[2], errfd[2];
-        pid_t pid;
         if (pipe(outfd) == -1) goto ERROR;
         if (pipe(errfd) == -1) goto ERROR;
-        pid = fork();
+        LINE();
+        pid_t pid = fork();
         if (pid == -1) goto ERROR;
         if (pid == 0) {
             DBG(" forked in.\n");
@@ -141,7 +141,7 @@ static void *worker(void *arg){
             LINE();
             struct timeval tv;
             tv.tv_sec = 0;
-            tv.tv_usec = 1'000'000; //1s
+            tv.tv_usec = 1000000; //1s
 
             LINE();
             fd_set rfds;
@@ -500,64 +500,59 @@ static enum MHD_Result ahc(void *cls,
     }
 }
 
-#define MES_CRASH "=== crash ===\n"
 static volatile sig_atomic_t _running = 1;
+static int _sig;
 static void sig_handler(int sig) {
     _running = 0;
-    dprintf(STDERR_FILENO, "=== crash ===\n");
-    dprintf(STDERR_FILENO, "signal: %d\n", sig);
-    dprintf(STDERR_FILENO, "line  : %d\n", line);
-    void *buf[32];
-    int n = backtrace(buf, 32);
-    backtrace_symbols_fd(buf, n, STDERR_FILENO);
+    _sig = sig;
 }
 
 int main(void) {
-    signal(SIGINT, sig_handler);
+    signal(SIGINT,  sig_handler);
     signal(SIGTERM, sig_handler);
     signal(SIGSEGV, sig_handler);
  
     DBG("config_load()\n");
     config_load();
+    if(conf.debug){
+        setvbuf(stdout, NULL, _IONBF, 0);
+    }
+    DBG("conf.cert %.26s...\n", conf.cert);
+    DBG("conf.key  %.26s...\n", conf.key);
+
     DBG("script_load()\n");
     script_load();
     DBG("job_load()\n");
     job_load();
-    if(conf.debug){
-        setvbuf(stdout, NULL, _IONBF, 0);
-    }
     
     DBG("create pthread\n");
     pthread_t th;
     pthread_create(&th, NULL, worker, NULL);
     pthread_detach(th);
-
-    DBG("conf.cert %.5s\n", conf.cert);
-    DBG("conf.key  %.5s\n", conf.key);
     DBG("start MHD daemon\n");
     char mes[256] = {0};
     struct MHD_Daemon *d = NULL;
     if (conf.cert && conf.key) {
         d = MHD_start_daemon(
-            MHD_USE_INTERNAL_POLLING_THREAD | MHD_USE_TLS,
-            conf.port,
-            NULL, NULL,
-            &ahc, NULL,
-            MHD_OPTION_HTTPS_MEM_CERT, conf.cert,
-            MHD_OPTION_HTTPS_MEM_KEY,  conf.key,
-            MHD_OPTION_END
-        );
+                MHD_USE_INTERNAL_POLLING_THREAD | MHD_USE_TLS,
+                conf.port,
+                NULL, NULL,
+                &ahc, NULL,
+                MHD_OPTION_HTTPS_MEM_CERT, conf.cert,
+                MHD_OPTION_HTTPS_MEM_KEY,  conf.key,
+                MHD_OPTION_END
+                );
         snprintf(mes, sizeof mes, "start https server. waiting at :%d\n", conf.port);
-    } else if(conf.force_https){
+    } else if (conf.force_https){
         snprintf(mes, sizeof mes, "FORCE_HTTPS=yes. stop starting https server.\n");
-    }else {
+    } else {
         d = MHD_start_daemon(
-            MHD_USE_INTERNAL_POLLING_THREAD,
-            conf.port,
-            NULL, NULL,
-            &ahc, NULL,
-            MHD_OPTION_END
-        );
+                MHD_USE_INTERNAL_POLLING_THREAD,
+                conf.port,
+                NULL, NULL,
+                &ahc, NULL,
+                MHD_OPTION_END
+                );
         snprintf(mes, sizeof mes, "start http server. waiting at :%d .\n", conf.port);
     }
 
@@ -580,9 +575,17 @@ int main(void) {
 
     printf("stop server.\n");
     MHD_stop_daemon(d);
-  
+
     job_unload();
     script_unload();
     config_unload();
+
+    dprintf(STDOUT_FILENO, "=== Server Stoped ===\n");
+    dprintf(STDOUT_FILENO, "signal: %d\n", _sig);
+    dprintf(STDOUT_FILENO, "line  : %d\n", _line);
+    void *buf[32];
+    int n = backtrace(buf, 32);
+    backtrace_symbols_fd(buf, n, STDOUT_FILENO);
+  
     return 0;
 }

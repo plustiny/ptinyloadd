@@ -8,9 +8,9 @@ const char *meta_data = S(
         "2": "processing",
         "4": "finished",
         "8": "error",
-        "16": "cancel",
+        "16": "canceling",
         "32": "canceled",
-        "64": "delete",
+        "64": "deleting",
         "128": "deleted",
         "255": "all" 
         }
