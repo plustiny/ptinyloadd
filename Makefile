@@ -8,6 +8,7 @@ PREFIX := /usr/local
 
 CFLAGS  += $(shell pkg-config --cflags $(PKGS))
 LDFLAGS += $(shell pkg-config --libs $(PKGS))
+LDFLAGS += -lwrap
 
 all: $(TARGET)
 

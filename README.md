@@ -13,7 +13,7 @@ A simple, lightweight server-side downloader inspired by pyLoad.<br>
 ### Server (Linux)
 
 ```bash
-sudo apt install libmicrohttpd-dev libjansson-dev zlib1g-dev
+sudo apt install libmicrohttpd-dev libjansson-dev zlib1g-dev libwrap0-dev
 
 git clone  https://github.com/plustiny/ptinyloadd.git
 cd ptinyloadd

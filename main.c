@@ -1,6 +1,9 @@
 #include <pthread.h>
 #include <jansson.h>
 #include <microhttpd.h>
+#include <tcpd.h>
+#include <arpa/inet.h>
+#include <netdb.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -20,6 +23,7 @@
 #include "script_list.h"
 #include "metadata.h"
 
+#define WRAPPER_SERVICE_NAME "ptinyloadd"
 #define GET "GET"
 #define POST "POST"
 
@@ -334,7 +338,48 @@ struct post_data {
     size_t len;
 };
 
-static enum MHD_Result ahc(void *cls,
+static int is_localhost(struct MHD_Connection *connection)
+{
+    const union MHD_ConnectionInfo *info =
+        MHD_get_connection_info(connection, MHD_CONNECTION_INFO_CLIENT_ADDRESS);
+    if (!info || !info->client_addr)
+        return 0;
+    const struct sockaddr *sa = info->client_addr; 
+    if (sa->sa_family == AF_INET) {
+        const struct sockaddr_in *in = (const struct sockaddr_in *)sa;
+        uint32_t ip = ntohl(in->sin_addr.s_addr);
+        return (ip >> 24) == 127;   // 127.0.0.0/8
+    }
+
+    if (sa->sa_family == AF_INET6) {
+        const struct sockaddr_in6 *in6 = (const struct sockaddr_in6 *)sa;
+        static const unsigned char loopback[16] = {0};
+        return memcmp(in6->sin6_addr.s6_addr, loopback, 15) == 0 &&
+               in6->sin6_addr.s6_addr[15] == 1;  // ::1
+    }
+
+    return 0;
+}
+
+static enum MHD_Result accept_policy(void *cls,
+              const struct sockaddr *addr,
+              socklen_t addrlen)
+{
+    (void)cls;
+    char host[NI_MAXHOST];
+
+    if (getnameinfo(addr, addrlen,
+                    host, sizeof(host),
+                    NULL, 0,
+                    NI_NUMERICHOST) != 0)
+        return MHD_NO;
+    
+    return hosts_ctl(WRAPPER_SERVICE_NAME, STRING_UNKNOWN, host, STRING_UNKNOWN)
+           ? MHD_YES
+           : MHD_NO;
+}
+
+static enum MHD_Result access_handler(void *cls,
                            struct MHD_Connection *c,
                            const char *url,
                            const char *method,
@@ -352,7 +397,7 @@ static enum MHD_Result ahc(void *cls,
     }
 
     struct MHD_BasicAuthInfo *auth = MHD_basic_auth_get_username_password3(c);
-    if (!auth || http_auth(auth->username, auth->password)){
+    if (!is_localhost(c) || !auth || http_auth(auth->username, auth->password)){
         DBG(" > auth failed.\n");
         return http_response(c, MHD_HTTP_UNAUTHORIZED);
     }
@@ -536,8 +581,8 @@ int main(void) {
         d = MHD_start_daemon(
                 MHD_USE_INTERNAL_POLLING_THREAD | MHD_USE_TLS,
                 conf.port,
-                NULL, NULL,
-                &ahc, NULL,
+                &accept_policy, NULL,
+                &access_handler, NULL,
                 MHD_OPTION_HTTPS_MEM_CERT, conf.cert,
                 MHD_OPTION_HTTPS_MEM_KEY,  conf.key,
                 MHD_OPTION_END
@@ -549,8 +594,8 @@ int main(void) {
         d = MHD_start_daemon(
                 MHD_USE_INTERNAL_POLLING_THREAD,
                 conf.port,
-                NULL, NULL,
-                &ahc, NULL,
+                &accept_policy, NULL,
+                &access_handler, NULL,
                 MHD_OPTION_END
                 );
         snprintf(mes, sizeof mes, "start http server. waiting at :%d .\n", conf.port);
