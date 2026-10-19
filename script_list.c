@@ -63,9 +63,12 @@ void script_load(){
     struct dirent *ent;
     struct stat st;
     while((ent = readdir(dir)) != NULL){
+        char path[1024];
         char *name = ent->d_name;
+        snprintf(path, sizeof(path), "%s/%s", conf.script_dir, name);
         if (name[0] == '.') continue;
-        if (stat(name, &st) == 0 && S_ISDIR(st.st_mode)) continue;
+        if (stat(path, &st)) continue;
+        if (S_ISDIR(st.st_mode)) continue;
         files[nfiles++] = strdup(name);
     }
     closedir(dir);
@@ -115,9 +118,8 @@ void script_load(){
                 e->desc = strdup(value);
             }
             if(strncmp(key, KEY_MATCH, sizeof KEY_MATCH) == 0){
-                DBG("convert %s to regex\n", value);
                 int err = regcomp(&(e->matcher), value, REG_EXTENDED);
-                DBG("regcomp err = %d\n", err);
+                DBG("convert %s to regex. err = %d.\n", value, err);
                 if(err){
                     char buf[256];
                     printf("❌ ERROR! invalid regex pattern in %s.\n", file);
@@ -129,12 +131,17 @@ void script_load(){
             }
         }
         if(f)   fclose(f);
-        script_add(e);
-        printf("add script. name: %s, file: %s\n", e->name, e->file);
+        if(e->name){
+            script_add(e);
+            printf("add script. name: %s, file: %s\n", e->name, e->file);
+        }else{
+            goto ERROR;
+        }
         continue;
 ERROR:
         if(f)   fclose(f);
         if(e)   free(e);
+        if(file) free(file);
         continue;
     }
     return;

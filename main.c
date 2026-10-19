@@ -73,7 +73,7 @@ static void *worker(void *arg){
             LINE();
             struct timeval tv;
             tv.tv_sec = 0;
-            tv.tv_usec = 1000000; //1s
+            tv.tv_usec = 1100000; //1.1s
 
             LINE();
             fd_set rfds;
@@ -90,6 +90,7 @@ static void *worker(void *arg){
             LINE();
             if (outfd[0] != -1 && FD_ISSET(outfd[0], &rfds)) {
                 ssize_t n = read(outfd[0], job->out, JOB_LINE_LENGTH - 1);
+                /* DBG("read from stdout: %ld\n", n); */
                 if (n > 0) {
                     job->out[n] = '\0';
                 } else if ( n == 0 ){
@@ -102,6 +103,7 @@ static void *worker(void *arg){
             LINE();
             if (errfd[0] != -1 && FD_ISSET(errfd[0], &rfds)) {
                 ssize_t n = read(errfd[0], job->err, JOB_LINE_LENGTH - 1);
+                /* DBG("read from stderr: %ld\n", n); */
                 if (n > 0) {
                     job->err[n] = '\0';
                 } else if ( n == 0 ){
@@ -158,14 +160,11 @@ int main(void) {
     signal(SIGINT,  sig_handler);
     signal(SIGTERM, sig_handler);
     signal(SIGSEGV, sig_handler);
- 
+    
     DBG("config_load()\n");
     config_load();
-    if(conf.debug){
-        setvbuf(stdout, NULL, _IONBF, 0);
-    }
-    DBG("conf.cert %.26s...\n", conf.cert);
-    DBG("conf.key  %.26s...\n", conf.key);
+    DBG("conf.cert %.26s\n", conf.cert);
+    DBG("conf.key  %.26s\n", conf.key);
 
     DBG("script_load()\n");
     script_load();

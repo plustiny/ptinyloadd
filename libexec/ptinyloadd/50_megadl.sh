@@ -10,5 +10,10 @@ require() {
 }
 
 require megadl
+if [[ "$@" == *"/folder/"* ]];then
+    FOLDER=$(yes ""|megadl --choose-files "$@" 2>/dev/null |head -n1 |sed 's/^[0-9]*\.[ ]*//')
+    DL_DIR="${DL_DIR}/${FOLDER}"
+    mkdir -p "${DL_DIR}"
+fi
 megadl --path "${DL_DIR}" "$@"
 

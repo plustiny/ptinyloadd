@@ -10,14 +10,14 @@ export SCRIPT_DIR=./libexec/ptinyloadd
 export FORCE_HTTPS=no
 KEYFILE=/etc/letsencrypt/live/*/privkey.pem
 CERTFILE=/etc/letsencrypt/live/*/fullchain.pem
-[ -e $KEYFILE ] && ln -s $KEYFILE ./
-[ -e $CERTFILE ] && ln -s $CERTFILE ./
+[ -e $KEYFILE ] && [ ! -e $(basename $KEYFILE) ] && ln -s $KEYFILE ./
+[ -e $CERTFILE ] && [ ! -e $(basename $CRETFILE) ] && ln -s $CERTFILE ./
 export CERT=./fullchain.pem
 export KEY=./privkey.pem
 
 if command -v gdb >/dev/null; then
  gdb -q -ex run ./ptinyloadd
 else
- ./ptinyloadd 
+ ./ptinyloadd |& tee log
 fi
 

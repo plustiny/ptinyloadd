@@ -76,6 +76,7 @@ void config_load(){
     }
     if(getenv("SCRIPT_DIR"))
         conf.script_dir = getenv("SCRIPT_DIR");
+    DBG("SCRIPT_DIR: %s\n", conf.script_dir);
     conf.cert = load_file(getenv("CERT"));
     conf.key = load_file(getenv("KEY"));
     conf.force_https = enabled("FORCE_HTTPS");

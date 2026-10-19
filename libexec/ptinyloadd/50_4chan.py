@@ -205,15 +205,16 @@ def parse(url):
     return links, dl_dir
 
 def download(links, dl_dir):
+    nerror = 0
     links = list(links)
     length = len(links)
     for i in range(length):
         url, name = links[i]
         try:
             print(f"\r[{i+1}/{length}] downloading: {url} .", flush=True)
-            if url.endswith((".jpg",".jpeg",".png",".webp",".webm",".mp3",".mp4")):
+            if url.endswith((".gif",".jpg",".jpeg",".png",".webp",".webm",".mp3",".mp4")):
                 o = ["-o", name] if name else []
-                subprocess.run(["aria2c", "-d", dl_dir, url, *o],
+                subprocess.run(["aria2c", "-c", "-d", dl_dir, *o, url],
                                stdout=sys.stderr,
                                timeout=TIMEOUT,
                                check=True)
@@ -224,28 +225,35 @@ def download(links, dl_dir):
                     if m:
                         num = m.group(1)
                         url = f"https://nyaa.si/download/{num}.torrent"
-                scheme  = sys.getenv("SCHEME")
-                port    = sys.getenv("PORT")
-                subprocess.run(["curl","-X","POST","-d", url, f"{scheme}://localhost:{port}"],
+                scheme  = os.getenv("SCHEME")
+                port    = os.getenv("PORT")
+                subprocess.run(["curl","-k", "-X","POST","-d", url, f"{scheme}://localhost:{port}"],
                                stdout=sys.stderr,
                                timeout=TIMEOUT,
                                check=True)
+                with open(os.path.join(dl_dir, "repost.list"), "a") as f:
+                    f.write("\n" + url)
                 print(f"\r[{i+1}/{length}] repost:     {url} .", flush=True)
             time.sleep(0.3)
         except Exception as e:
+            nerror += 1
             print(e, file=sys.stderr)
             msg = " ".join(str(e).split())
-            with open(os.path.join(dl_dir, "error.list"), "w") as f:
+            with open(os.path.join(dl_dir, "error.list"), "a") as f:
                 f.write("\n" + url)
                 f.write("\n#"+ msg )
+    return nerror
 
 def main(args):
+    err = 0
     try:
         check_command("curl")
         check_command("aria2c")
         for url in args:
             links, dl_dir = parse(url)
-            download(links, dl_dir)
+            err += download(links, dl_dir)
+        if 0 < err:
+            sys.exit(1)
     except Exception as e:
         print(e, file=sys.stderr)
         sys.exit(1)
