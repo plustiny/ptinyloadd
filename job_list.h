@@ -2,6 +2,7 @@
 #include <jansson.h>
 #include <stdint.h>
 #include <stdatomic.h>
+#include "script_list.h"
 
 #define JOB_LINE_LENGTH 512
 
@@ -24,6 +25,7 @@ struct Job {
     char *out;
     char *err;
     char *scriptfile;
+    char *scriptname;
     int  ec;
     _Atomic Job_status status;
 		struct Job *next;
@@ -32,7 +34,7 @@ typedef struct Job Job_t;
 
 void job_load();
 void job_unload();
-int job_register(char *post, char *scriptfile);
+int job_register(char *post, script_t *script);
 Job_t *job_next();
 json_t *job_to_json(uint32_t max, Job_status status);
 void job_change_status(const char *id, Job_status status, Job_status proc, Job_status wait);

@@ -10,11 +10,11 @@ require() {
 }
 
 require aria2c
-url="$@"
 aria2c -d "${DL_DIR}" \
     -c \
     --allow-overwrite=true \
     --seed-time=0 \
     --log-level=error \
     --summary-interval=10 \
-    "${url}"
+    "$@"
+

@@ -4,6 +4,7 @@
 #include "debug.h"
 #include "config.h"
 #include "job_list.h"
+#include "script_list.h"
 
 #define ABORT_FILE  "ptinyloadd_abort.json"
 
@@ -52,7 +53,7 @@ static void job_add(Job_t *x){
 }
 
 static Job_t *job_free(Job_t *job){
-    DBG(" in job_free()\n");
+    /* DBG(" in job_free()\n"); */
     Job_t *next = NULL; 
     if(job != NULL){
         next = job->next;
@@ -63,8 +64,9 @@ static Job_t *job_free(Job_t *job){
     free(job->out);
     free(job->err);
     free(job->scriptfile);
+    free(job->scriptname);
     free(job);
-    DBG(" out job_free()\n");
+    /* DBG(" out job_free()\n"); */
     return next;
 }
 
@@ -109,7 +111,7 @@ int job_status_changed(){
     return 0;
 }
 
-int job_register(char *post, char *scriptfile){
+int job_register(char *post, script_t *script){
     pthread_mutex_lock(&job_mutex);
     Job_t *job = calloc(1, sizeof(Job_t));
     if(job==NULL)   return -1;
@@ -117,8 +119,9 @@ int job_register(char *post, char *scriptfile){
     if(post != NULL){
         job->post = strdup(post);
     }
-    if(scriptfile != NULL){
-        job->scriptfile = strdup(scriptfile);
+    if(script != NULL){
+        job->scriptfile = strdup(script->file);
+        job->scriptname = strdup(script->name);
         job->status = unprocessed;
     }else{
         job_clear_buf(job);
@@ -191,7 +194,8 @@ json_t *job_to_json(uint32_t max, Job_status status){
             SET_FIELD(o, "id", "s?", job->id);
             SET_FIELD(o, "ec", "i", job->ec);
             SET_FIELD(o, "status", "i", job->status);
-            SET_FIELD(o, "script", "s?", job->scriptfile);
+            SET_FIELD(o, "scriptfile", "s?", job->scriptfile);
+            SET_FIELD(o, "scriptname", "s?", job->scriptname);
             SET_FIELD(o, "post", "s?", job->post);
             SET_FIELD(o, "out", "s?", job->out);
             SET_FIELD(o, "err", "s?", job->err);
@@ -246,7 +250,8 @@ void job_load(){
             return;
         }
         job->id = json_str_val(obj, "id");
-        job->scriptfile = json_str_val(obj, "script");
+        job->scriptfile = json_str_val(obj, "scriptfile");
+        job->scriptname = json_str_val(obj, "scriptname");
         job->post = json_str_val(obj, "post");
         job->out = json_str_val(obj, "out");
         job->err = json_str_val(obj, "err");

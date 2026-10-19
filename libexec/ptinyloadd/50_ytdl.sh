@@ -10,11 +10,10 @@ require() {
 }
 
 require yt-dlp
-url="$@"
 cd "${DL_DIR}" && yt-dlp \
 	--no-cache-dir -f "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best" \
 	--ignore-no-formats-error \
 	--write-subs --write-auto-sub --sub-lang ja,en --convert-subs srt \
 	--write-comments \
-	--newline "${url}"
+	--newline "$@"
 

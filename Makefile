@@ -2,7 +2,7 @@
 CC := gcc
 CFLAGS := -Warray-bounds=2 -Wnull-dereference -Wuse-after-free=3 -Wall -Wextra -g -O0 -Wno-deprecated-declarations
 TARGET := ptinyloadd
-SRC := main.c config.c job_list.c script_list.c metadata.c
+SRC := main.c config.c job_list.c script_list.c metadata.c http.c
 PKGS := libmicrohttpd jansson libcrypto zlib
 PREFIX := /usr/local
 

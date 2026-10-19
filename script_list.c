@@ -1,3 +1,4 @@
+#include <sys/stat.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,14 +26,6 @@ static char *trim(char *s){
     return s;
 }
 
-struct script {
-    char *scriptfile;
-    char *name;
-    char *desc;
-    regex_t matcher;
-    struct script *next;
-};
-typedef struct script script_t;
 
 static script_t *script_head = NULL;
 static script_t *script_tail = NULL;
@@ -42,7 +35,7 @@ static script_t *script_free(script_t *x){
     if(x){
         next = x->next;
     }
-    free(x->scriptfile);
+    free(x->file);
     free(x->name);
     free(x->desc);
     regfree(&x->matcher);
@@ -68,9 +61,12 @@ void script_load(){
     char *files[1024] ={0};
     int nfiles = 0;
     struct dirent *ent;
+    struct stat st;
     while((ent = readdir(dir)) != NULL){
-        if(ent->d_name[0] == '.') continue;
-        files[nfiles++] = strdup(ent->d_name);
+        char *name = ent->d_name;
+        if (name[0] == '.') continue;
+        if (stat(name, &st) == 0 && S_ISDIR(st.st_mode)) continue;
+        files[nfiles++] = strdup(name);
     }
     closedir(dir);
 
@@ -93,7 +89,7 @@ void script_load(){
             printf("❌ ERROR! memory allocation failed at script_load().\n");
             goto ERROR;
         }
-        e->scriptfile = file;
+        e->file = file;
         snprintf(path, sizeof(path), "%s/%s", conf.script_dir, file);
         f = fopen(path, "rb");
         if(!f){
@@ -101,7 +97,7 @@ void script_load(){
             goto ERROR;
         }
         while (fgets(line, sizeof line, f)) {
-            DBG("file: %s, line: %s", file, line);
+            /* DBG("file: %s, line: %s", file, line); */
             regmatch_t match[3];
             if(regexec(&meta_reg, line, 3, match, 0))   continue;
             
@@ -134,11 +130,12 @@ void script_load(){
         }
         if(f)   fclose(f);
         script_add(e);
-        printf("add script. name: %s, file: %s\n", e->name, e->scriptfile);
+        printf("add script. name: %s, file: %s\n", e->name, e->file);
         continue;
 ERROR:
         if(f)   fclose(f);
         if(e)   free(e);
+        continue;
     }
     return;
 }
@@ -150,7 +147,7 @@ void script_unload(){
     }
 }
 
-char *script_search(char *post){
+script_t *script_search(char *post){
     DBG(" in script_search\n");
     script_t *e = script_head;
     while(e){
@@ -158,7 +155,7 @@ char *script_search(char *post){
         int ret = regexec(&(e->matcher), post, 0, NULL, 0);
         if(!ret){
             DBG(" > found %s\n", e->name);
-            return strdup(e->scriptfile);
+            return e;
         }
         e = e->next;
     };

@@ -77,11 +77,14 @@ void config_load(){
     if(getenv("SCRIPT_DIR"))
         conf.script_dir = getenv("SCRIPT_DIR");
     conf.cert = load_file(getenv("CERT"));
-    DBG("CERT: %.28s\n", conf.cert);
     conf.key = load_file(getenv("KEY"));
-    DBG("KEY: %.28s\n", conf.key);
     conf.force_https = enabled("FORCE_HTTPS");
     DBG("FORCE_HTTPS: %d\n", conf.force_https); 
+    if (conf.cert && conf.key) {
+        setenv("SCHEME", "https", 1);
+    }else{
+        setenv("SCHEME", "http", 1);
+    }
     return;
 }
 
