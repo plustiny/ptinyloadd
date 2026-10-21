@@ -10,7 +10,8 @@ Config conf = {
     .name = "foo",
     .passwd = "bar",
     .dl_dir = "/tmp",
-    .script_dir = "./libexec/ptinyloadd"
+    .script_dir = "./libexec/ptinyloadd",
+    .nthread = 2, 
 };
 
 static char *load_file(const char *path){
@@ -78,7 +79,9 @@ void config_load(){
         conf.script_dir = getenv("SCRIPT_DIR");
     DBG("SCRIPT_DIR: %s\n", conf.script_dir);
     conf.cert = load_file(getenv("CERT"));
+    DBG("conf.cert %.26s\n", conf.cert);
     conf.key = load_file(getenv("KEY"));
+    DBG("conf.key  %.26s\n", conf.key);
     conf.force_https = enabled("FORCE_HTTPS");
     DBG("FORCE_HTTPS: %d\n", conf.force_https); 
     if (conf.cert && conf.key) {
@@ -86,7 +89,12 @@ void config_load(){
     }else{
         setenv("SCHEME", "http", 1);
     }
-    return;
+    char *s = getenv("NTHREAD");
+    if(s){
+        conf.nthread = atoi(s);
+    }
+    DBG("NTHREAD: %d\n", conf.nthread);
+   return;
 }
 
 void config_unload(){

@@ -11,6 +11,7 @@ typedef struct Config {
     char *cert;
     char *key;
     int force_https;
+    int nthread;
 } Config;
 extern Config conf;
 

@@ -1,5 +1,4 @@
 #!/bin/bash
-exec 2>&1
 export DEBUG=yes
 export PORT=1881
 export NAME=foo
@@ -18,6 +17,6 @@ export KEY=./privkey.pem
 if command -v gdb >/dev/null; then
  gdb -q -ex run ./ptinyloadd
 else
- ./ptinyloadd |& tee log
+ ./ptinyloadd 2>&1| tee log
 fi
 

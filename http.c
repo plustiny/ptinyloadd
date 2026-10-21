@@ -23,7 +23,6 @@
 #include "http.h"
 #include "debug.h"
 #include "config.h"
-#include "metadata.h"
 #include "job_list.h"
 
 #define WRAPPER_SERVICE_NAME "ptinyloadd"
@@ -89,7 +88,7 @@ static int http_auth(char* name, char* passwd){
 
 static void query_restart(const char *id, Job_status status){
     DBG(" in query_restart.\n");
-    job_change_status(id, status, unprocessed, processing);
+    job_change_status(id, status, unprocessed, unprocessed);
 }
 
 static void query_cancel(const char *id, Job_status status){
@@ -114,8 +113,11 @@ static char *query_select(uint32_t max, Job_status status){
 
 static char *query_meta(){
     DBG(" in query_meta.\n");
+    json_t *o = job_metadata();
+    char *meta_data = json_dumps(o, JSON_INDENT(0));
+    json_decref(o);
     DBG(" meta: %s\n", meta_data);
-    return strdup(meta_data);
+    return meta_data;
 }
 
 static unsigned char *gzip_compress(const char* src, size_t src_size, size_t *out_size){
@@ -400,6 +402,7 @@ enum MHD_Result access_handler(void *cls,
     
     DBG(" > check post has data.\n");
     if( post == NULL ){
+        DBG(" > post is null. end.\n");
         printf("⚠ post is null. %s\n", post);
         return http_response(c, MHD_HTTP_BAD_REQUEST);
     }
@@ -407,17 +410,18 @@ enum MHD_Result access_handler(void *cls,
     DBG(" > search script file. post:%s.\n", post);
     script_t *script = script_search(post);
     if(script == NULL){
+        DBG(" > donot match any scripts. end.\n");
         printf("⚠ donot match any scripts. %s\n", post);
     }
 
-    DBG("add post: %s, script: %s.\n", post, script->name);
+    DBG(" > add job: %s %s.\n", script->name, post);
     int ret = job_register(post, script);
     free(post);
     if(ret){
-        DBG(" error at adding.\n");
+        eprintf("error at adding.\n");
         return http_response(c, MHD_HTTP_INTERNAL_SERVER_ERROR);
     }else{
-        DBG("added.\n");
+        DBG(" > added.\n");
         return http_response(c, MHD_HTTP_ACCEPTED);
     }
 }

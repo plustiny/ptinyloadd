@@ -1,10 +1,14 @@
 #include <string.h>
 #include <stdarg.h>
 #include <pthread.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
 #include "debug.h"
 #include "config.h"
 #include "job_list.h"
 #include "script_list.h"
+#include "utf8.h"
 
 #define ABORT_FILE  "ptinyloadd_abort.json"
 
@@ -53,7 +57,6 @@ static void job_add(Job_t *x){
 }
 
 static Job_t *job_free(Job_t *job){
-    /* DBG(" in job_free()\n"); */
     Job_t *next = NULL; 
     if(job != NULL){
         next = job->next;
@@ -66,12 +69,11 @@ static Job_t *job_free(Job_t *job){
     free(job->scriptfile);
     free(job->scriptname);
     free(job);
-    /* DBG(" out job_free()\n"); */
     return next;
 }
 
  void job_clean(){
-    DBG(" in job_clean\n");
+    DBG(">> job_clean.");
     Job_t *job = job_head;
     while(job){
         if(job->status != deleted)
@@ -79,13 +81,14 @@ static Job_t *job_free(Job_t *job){
         job = job_free(job);
     }
     if(job == NULL){
-        DBG(" job list is empty now.\n");
+        DBG("list is empty.");
         job_head = NULL;
         job_tail = NULL;
         id_reset();
+        DBG("end.\n");
         return;
     }
-    DBG(" new job_head found.\n");
+    DBG(".");
     job_head = job;
 
     Job_t *tail = job_head;
@@ -100,8 +103,9 @@ static Job_t *job_free(Job_t *job){
         }
     }
     job_tail = tail;
-    DBG(" new job_tail found.\n");
+    DBG(".");
     job_tail->next = NULL;
+    DBG("end\n");
 }
 
 int job_status_changed(){
@@ -164,32 +168,34 @@ static json_t *json_from_field(char *fmt, ...){
     va_list ap;
     va_start(ap, fmt);
     json_t *v = json_vpack_ex(&json_error, 0, fmt, ap);
-    if(conf.debug){
-        if(fmt[0]=='s') DBG("%s\n", va_arg(ap, char*));
-        if(fmt[0]=='i') DBG("%d\n", va_arg(ap, int));
-    }
+    DBG_IF(fmt[0]=='s', "value: %s\n", va_arg(ap, char*));
+    DBG_IF(fmt[0]=='i', "value: %d\n", va_arg(ap, int));
     va_end(ap);
     if(v){
         return v;
     }else{
-        DBG("json error: %s \n", json_error.text);
+        eprintf("json error: %s\n", json_error.text);
         return json_string(json_error.text);
     }
 }
+
 #define SET_FIELD(o, key, fmt, field)   do{\
-    DBG("%s ",key);\
+    DBG("key: %s\n",key);\
     json_t *v =json_from_field(fmt, field);\
     json_object_set_new(o, key, v);\
 }while(0);
 
 json_t *job_to_json(uint32_t max, Job_status status){
+    DBG("job_to_json\n");
     json_t *ary = json_array();
     Job_t *job = job_head;
     while(job){
         if(max-- == 0 )
             break;
         if(job->status & status){
-            DBG(" job_to_json [id:%s] %u and %u\n",job->id, job->status, status);
+            DBG_JOB(job);
+            utf8_fix(job->out);
+            utf8_fix(job->err);
             json_t *o = json_object();
             SET_FIELD(o, "id", "s?", job->id);
             SET_FIELD(o, "ec", "i", job->ec);
@@ -205,9 +211,22 @@ json_t *job_to_json(uint32_t max, Job_status status){
     }
     return ary;
 }
+#undef SET_FIELD
+
+#define JSON_ITEM(key, value) do{\
+    json_t *v =json_from_field("i", value);\
+    json_object_set_new(o, #key, v);\
+}while(0);
+
+json_t *job_metadata(){
+    json_t *o = json_object();
+    JOB_STATUS_LIST(JSON_ITEM);
+    return json_pack("{s,o}","job_status", o);
+}
+#undef JSON_ITEM
 
 void job_unload(){
-    DBG(" in job_unload.\n");
+    DBG("job_unload.\n");
     char pathname[1024];
     snprintf(pathname, sizeof(pathname), "%s/%s", conf.dl_dir, ABORT_FILE);
     
@@ -225,7 +244,7 @@ void job_unload(){
             "jobs", ary);
     json_dump_file(o, pathname, JSON_INDENT(1));
     json_decref(ary);
-    DBG(" > write job list to %s .\n",pathname);
+    eprintf("> write job list to %s .\n",pathname);
 
     Job_t *job = job_head;
     while(job){
@@ -246,7 +265,7 @@ void job_load(){
         json_t *obj = json_array_get(ary, i);
         Job_t *job = calloc(1, sizeof(Job_t));
         if(job == NULL){
-            printf("❌ memory allocation failed at job_load().\n");
+            eprintf("❌ memory allocation failed at job_load().\n");
             return;
         }
         job->id = json_str_val(obj, "id");
@@ -262,29 +281,32 @@ void job_load(){
 }
 
 void job_change_status(const char *id, Job_status status, Job_status running, Job_status waiting){
-    DBG(" > lets change id=%s, status=%d.\n", id, status);
+    DBG("job_change_status( id=%s, status=%d )\n", id, status);
     Job_t *job = job_head;
     while(job){
-        DBG(" > job->id=%s, job->status=%d.\n",job->id, job->status);
+        DBG("> job->id=%s, job->status=%d.\n",job->id, job->status);
         if((id == NULL && (job->status & status))
                 || (id != NULL && strncmp(job->id, id, strlen(id))==0)){
-            DBG(" > change it!\n");
+            DBG("> change it!\n");
             if(job->status == processing){
                 Job_status expected = processing;
                 atomic_compare_exchange_strong(&(job->status), &expected, running);
             }else{
                 atomic_store(&(job->status), waiting);
             }
+            if(job->status == unprocessed){
+                job_clear_buf(job);
+                job->ec = 0;
+            }
         }
         job = job->next;
     }
-    DBG(" job status changed");
     job_status_changed();
 }
 
 void job_clear_buf(Job_t *job){
     if(!job){
-        DBG(" job is null.\n");
+        eprintf(" job is null.\n");
     }
     if(job->out){
         memset(job->out, 0, sizeof(char) * JOB_LINE_LENGTH);

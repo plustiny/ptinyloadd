@@ -2,7 +2,7 @@
 CC := gcc
 CFLAGS := -Warray-bounds=2 -Wnull-dereference -Wuse-after-free=3 -Wall -Wextra -g -O0 -Wno-deprecated-declarations
 TARGET := ptinyloadd
-SRC := main.c config.c job_list.c script_list.c metadata.c http.c
+SRC := main.c config.c job_list.c script_list.c http.c utf8.c
 PKGS := libmicrohttpd jansson libcrypto zlib
 PREFIX := /usr/local
 
@@ -33,7 +33,7 @@ install: all
 	mkdir -pm 0755 $(PREFIX)/etc/ptinyloadd/
 	mkdir -pm 0755 $(PREFIX)/libexec/ptinyloadd/
 	cp -f ptinyloadd $(PREFIX)/bin/
-	cp -f ptinyloadd.conf $(PREFIX)/etc/ptinyloadd/
+	-cp -f ptinyloadd.conf $(PREFIX)/etc/ptinyloadd/
 	cp -fr ./libexec/ptinyloadd/* $(PREFIX)/libexec/ptinyloadd/
 	cp -f ptinyloadd.service /etc/systemd/system/
 	chown -R ptinyload:share $(PREFIX)/etc/ptinyloadd/
@@ -42,6 +42,7 @@ install: all
 service:
 	systemctl daemon-reload
 	systemctl enable ptinyloadd
+	-systemctl stop ptinyloadd
 	systemctl start ptinyloadd
 
 uninstall:
