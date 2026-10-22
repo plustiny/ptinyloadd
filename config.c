@@ -94,6 +94,8 @@ void config_load(){
         conf.nthread = atoi(s);
     }
     DBG("NTHREAD: %d\n", conf.nthread);
+    conf.no_auth_local = enabled("NO_AUTH_LOCAL");
+    DBG("NO_AUTH_LOCAL %d\n", conf.no_auth_local);
    return;
 }
 

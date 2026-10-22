@@ -9,59 +9,34 @@ static void hexdump(unsigned char c){
     eputc('\n');
 }
 
-static int utf8_type(unsigned char c)
-{
-    if (c <= 0x7F)
-        return 1;
-    if (c >= 0x80 && c <= 0xBF)
-        return -1;  // 継続バイト
-    if (c >= 0xC2 && c <= 0xDF)
-        return 2;
-    if (c >= 0xE0 && c <= 0xEF)
-        return 3;
-    if (c >= 0xF0 && c <= 0xF4)
-        return 4;
-    return 0;       // 不正な先頭バイト
-}
-
 /* 末尾のUTF-8文字を完成させるのに必要なバイト数
-   -1: 不正、0: 追加不要、正数: 不足バイト数 */
+   -n: 不正、0: 追加不要、正数: 不足バイト数 */
 int utf8_missing(const unsigned char *s, size_t len)
 {
     if (len == 0)
         return 0;
 
-    size_t i = len;
-    int cont = 0;
-    while (i > 0 && cont < 3) {
-        unsigned char c = s[i - 1];
+    unsigned char c; 
+    size_t cont;
+    for(cont = 1; cont < 4; cont++){
+        if (len < cont)
+            return -1;
+        c = s[len - cont];
         if (c < 0x80 || c >= 0xC0)
             break;
-        cont++;
-        i--;
     }
-    if (i == 0)
+    
+    if (c >= 0x80 && c <= 0xBF)
         return -1;
-
-    unsigned char c = s[i - 1];
-    int type = utf8_type(c);
-    if (type == 1)
-        return cont == 0 ? 0 : -1;
-    if (type == 0 || type == -1)
-        return -1;
-    int need = type - 1;
-    if (cont > need)
-        return -1;
-    /* 先頭バイトに応じた第2バイトの制約 */
-    if (cont > 0) {
-        unsigned char c2 = s[i];
-        if ((c == 0xE0 && c2 < 0xA0) ||
-            (c == 0xED && c2 > 0x9F) ||
-            (c == 0xF0 && c2 < 0x90) ||
-            (c == 0xF4 && c2 > 0x8F))
-            return -1;
-    }
-    return need - cont;
+    if (c <= 0x7F)
+        return 1 - cont;
+    if (c >= 0xC2 && c <= 0xDF)
+        return 2 - cont;
+    if (c >= 0xE0 && c <= 0xEF)
+        return 3 - cont;
+    if (c >= 0xF0 && c <= 0xF4)
+        return 4 - cont;
+    return -1;
 }
 
 static int utf8_cont(unsigned char c)

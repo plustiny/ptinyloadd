@@ -16,18 +16,25 @@
 
 static int gently_kill(pid_t pid, int *exit_status){
     pid_t r = waitpid(pid, exit_status, WNOHANG);
-    if(r == pid) return 0;
-    if(kill(pid, SIGTERM))  return -1;
+    if( r == -1) goto ERROR;
+    if( r == pid) return 0;
+    if(kill(pid, SIGTERM))  goto ERROR;
     for(int i=0; i<30; i++){
-        pid_t r = waitpid(pid, exit_status, WNOHANG);
-        if( r == -1)    return -1;
-        if( r == pid )    return 0;
+        r = waitpid(pid, exit_status, WNOHANG);
+        if( r == -1)    goto ERROR;
+        if( r == pid )  return 0;
         usleep(100000);// 100ms
     }
-    if(kill(pid, SIGKILL))  return -1;
+    if(kill(pid, SIGKILL))  goto ERROR;
+    r = waitpid(pid, exit_status, 0);
+    if( r == -1) goto ERROR;
     return 0;
+ERROR:
+    perror("gently_kill");
+    return -1;
 }
 
+/* 前回の更新の改行以降は残して追記 */
 static ssize_t readbuf(int fd, char *buf, size_t bufsize){
     char c;
     ssize_t n = read(fd, &c, 1);
@@ -233,36 +240,32 @@ int main(void) {
 
     if (!d) {
         if(strlen(mes)){
-            fprintf(stderr, "%s", mes);
+            eprintf("%s", mes);
         }
         perror("failed to start server.\n");
-        fflush(stdout);
-        fflush(stderr);
         return 1;
     }
-    printf("%s", mes);
-    fflush(stdout);
-    fflush(stderr);
+    eprintf("%s", mes);
 
     while(_running){
         pause();
     }
 
-    printf("stop server.\n");
+    eprintf("stop server.\n");
     MHD_stop_daemon(d);
 
     job_unload();
     script_unload();
     config_unload();
 
-    dprintf(STDOUT_FILENO, "=== server stoped ===\n");
-    dprintf(STDOUT_FILENO, "signal:           %d\n", _sig);
+    eprintf("=== server stoped ===\n");
+    eprintf("signal:           %d\n", _sig);
     for(int i=0; i<nthread; i++){
-    dprintf(STDOUT_FILENO, "%dth thread line: %d\n", i, _line[i]);
+    eprintf("%dth thread line: %d\n", i, _line[i]);
     }
     void *buf[32];
     int n = backtrace(buf, 32);
-    backtrace_symbols_fd(buf, n, STDOUT_FILENO);
+    backtrace_symbols_fd(buf, n, STDERR_FILENO);
   
     return 0;
 }

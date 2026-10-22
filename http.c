@@ -275,8 +275,8 @@ enum MHD_Result access_handler(void *cls,
     }
 
     struct MHD_BasicAuthInfo *auth = MHD_basic_auth_get_username_password3(c);
-    int is_remote = !is_localhost(c);
-    if(is_remote && (!auth || http_auth(auth->username, auth->password))){
+    int no_auth = conf.no_auth_local && is_localhost(c);
+    if(!no_auth && (!auth || http_auth(auth->username, auth->password))){
         DBG(" > auth failed.\n");
         return http_response(c, MHD_HTTP_UNAUTHORIZED);
     }

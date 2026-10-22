@@ -163,30 +163,9 @@ static char *json_str_val(json_t *obj, char *key){
         return s? strdup(s): NULL;
 }
 
-static json_t *json_from_field(char *fmt, ...){
-    json_error_t json_error;
-    va_list ap;
-    va_start(ap, fmt);
-    json_t *v = json_vpack_ex(&json_error, 0, fmt, ap);
-    DBG_IF(fmt[0]=='s', "value: %s\n", va_arg(ap, char*));
-    DBG_IF(fmt[0]=='i', "value: %d\n", va_arg(ap, int));
-    va_end(ap);
-    if(v){
-        return v;
-    }else{
-        eprintf("json error: %s\n", json_error.text);
-        return json_string(json_error.text);
-    }
-}
-
-#define SET_FIELD(o, key, fmt, field)   do{\
-    DBG("key: %s\n",key);\
-    json_t *v =json_from_field(fmt, field);\
-    json_object_set_new(o, key, v);\
-}while(0);
-
 json_t *job_to_json(uint32_t max, Job_status status){
     DBG("job_to_json\n");
+    json_error_t json_error;
     json_t *ary = json_array();
     Job_t *job = job_head;
     while(job){
@@ -194,17 +173,19 @@ json_t *job_to_json(uint32_t max, Job_status status){
             break;
         if(job->status & status){
             DBG_JOB(job);
-            utf8_fix(job->out);
-            utf8_fix(job->err);
-            json_t *o = json_object();
-            SET_FIELD(o, "id", "s?", job->id);
-            SET_FIELD(o, "ec", "i", job->ec);
-            SET_FIELD(o, "status", "i", job->status);
-            SET_FIELD(o, "scriptfile", "s?", job->scriptfile);
-            SET_FIELD(o, "scriptname", "s?", job->scriptname);
-            SET_FIELD(o, "post", "s?", job->post);
-            SET_FIELD(o, "out", "s?", job->out);
-            SET_FIELD(o, "err", "s?", job->err);
+            if(utf8_fix(job->out))  DBG("utf8 fixed\n");
+            if(utf8_fix(job->err))  DBG("utf8 fixed\n");
+            json_t *o = json_pack_ex(&json_error, 0,
+                    "{s:s?, s:i, s:i, s:s?, s:s?, s:s?, s:s?, s:s?}",
+                    "id", job->id,
+                    "ec", job->ec,
+                    "status", job->status,
+                    "scriptfile", job->scriptfile,
+                    "scriptname", job->scriptname,
+                    "post", job->post,
+                    "out", job->out,
+                    "err", job->err);
+            if(o == NULL)   DBG("job_to_json %s \n", json_error.text);
             json_array_append_new(ary, o);
         }        
         job = job->next;
@@ -214,8 +195,7 @@ json_t *job_to_json(uint32_t max, Job_status status){
 #undef SET_FIELD
 
 #define JSON_ITEM(key, value) do{\
-    json_t *v =json_from_field("i", value);\
-    json_object_set_new(o, #key, v);\
+    json_object_set_new(o, #key, json_integer(value));\
 }while(0);
 
 json_t *job_metadata(){

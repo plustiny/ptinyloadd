@@ -20,8 +20,6 @@ else
 	echo [ERR] $status
 fi
 
-echo
-echo "test auth"
 status=$($CURL -X GET http://foo:bar@localhost:1881)
 if [ "$status" = "400" ];then
 	echo [OK] 400 Bad Request
@@ -29,6 +27,8 @@ else
 	echo [ERR] $status
 fi
 
+echo
+echo "test auth"
 status=$($CURL -X POST http://FOO:bar@localhost:1881 -d bas)
 if [ "$status" = "401" ];then
 	echo [OK] 401 Unauthorized

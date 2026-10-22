@@ -2,11 +2,11 @@
 export DEBUG=yes
 export PORT=1881
 export NAME=foo
-export PASSWD=bar
 export PASSWD_MD5=37b51d194a7513e45b56f6524f2d51f2
 export DL_DIR=/var/tmp/
 export SCRIPT_DIR=./libexec/ptinyloadd
 export FORCE_HTTPS=no
+export NO_AUTH_LOCAL=no
 KEYFILE=/etc/letsencrypt/live/*/privkey.pem
 CERTFILE=/etc/letsencrypt/live/*/fullchain.pem
 [ -e $KEYFILE ] && [ ! -e $(basename $KEYFILE) ] && ln -s $KEYFILE ./
