@@ -226,7 +226,7 @@ void job_unload(){
     
     json_t *ary = job_to_json(UINT32_MAX, all);
     json_t *o = json_pack(
-            "{s:s, s:i, s:o}",
+            "{s:s, s:i, s:o?}",
             "time", datetime,
             "_id", _id,
             "jobs", ary);

@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <arpa/inet.h>
 #include <limits.h>
+#include <errno.h>
 #include "main.h"
 #include "settings.h"
 #include "job_list.h"
@@ -15,6 +16,16 @@
 #include "utf8.h"
 
 #define LINE()  do{ *((int *)_line) = (int) __LINE__;}while(0);
+
+static char *masked_passwd(){
+    if(conf.passwd_md5){
+        return "[md5]";
+    }
+    if(conf.passwd){
+        return "[***]";
+    }
+    return NULL;
+}
 
 static int gently_kill(pid_t pid, int *exit_status){
     pid_t r = waitpid(pid, exit_status, WNOHANG);
@@ -73,6 +84,7 @@ static void *worker(void *_line){
     DBG("worker\n");
     char token[12];
     for(;;){
+        errno = 0;
         DBG("> job_next.\n");LINE();
         Job_t *job = job_next();
         atomic_store(&(job->status), processing);
@@ -103,7 +115,7 @@ static void *worker(void *_line){
             int err = execl(pathname, job->scriptfile, job->post, NULL);
             if(err){
                 eprintf("❌ ERROR! at execl.\n");
-                perror("error");
+                perror("execl");
             }
             _exit(1);
         }
@@ -183,7 +195,7 @@ static void *worker(void *_line){
 ERROR:
         LINE();
         eprintf("❌ ERROR! at job %s %s.\n", job->scriptfile, job->post);
-        perror("error");
+        if(errno) perror("worker");
         atomic_store(&(job->status), error);
     }
 }
@@ -217,6 +229,7 @@ int main(void) {
     }
 
     DBG("start MHD daemon\n");
+    errno = 0;
     struct MHD_Daemon *local_daemon = NULL;
     struct MHD_Daemon *public_daemon = NULL;
     App_data local_data  = { .is_local = 1 };
@@ -236,10 +249,12 @@ int main(void) {
                 MHD_OPTION_END
                 );
         if(!local_daemon){
-            perror("failed to start local http server.\n");
+            eprintf("failed to start local http server.\n");
+            if(errno) perror("server");
             goto FINALIZE;
         }
-        eprintf("start local http server. waiting at :%d\n", conf.lport);
+        eprintf("start local http server. uname=%s, passwd=%s. listening on port %d\n",
+                conf.uname, masked_passwd(), conf.lport);
     }
     if (conf.cert && conf.key) {
         public_daemon = MHD_start_daemon(
@@ -252,12 +267,14 @@ int main(void) {
                 MHD_OPTION_END
                 );
         if(!public_daemon){
-            perror("failed to start public https server.\n");
+            eprintf("failed to start public https server.\n");
+            if(errno) perror("server");
             goto FINALIZE;
         }
-        eprintf("start public http server. waiting at :%d\n", conf.port);
+        eprintf("start public https server. uname=%s, passwd=%s. listening on port %d\n",
+                conf.uname, masked_passwd(), conf.port);
     }else if(conf.force_https){
-        perror("FORCE_HTTPS=yes. stop starting https server.\n");
+        eprintf("FORCE_HTTPS=yes. stop starting https server.\n");
         goto FINALIZE;
     }else{
         public_daemon = MHD_start_daemon(
@@ -268,10 +285,12 @@ int main(void) {
                 MHD_OPTION_END
                 );
         if(!public_daemon){
-            perror("failed to start public http server.\n");
+            eprintf("failed to start public http server.\n");
+            if(errno) perror("server");
             goto FINALIZE;
         }
-        eprintf("start http server. waiting at :%d .\n", conf.port);
+        eprintf("start public http server. uname=%s, passwd=%s. listening on port %d\n",
+                conf.uname, masked_passwd(), conf.port);
     }
 
     while(_running){

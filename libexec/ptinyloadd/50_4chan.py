@@ -230,7 +230,7 @@ def download(links, dl_dir):
                                check=True)
                 print(f"\r[{i+1}/{length}] downloaded: {url} .", flush=True)
             elif not "boards.4chan.org" in url:
-                port    = os.getenv("LOCAL_PORT")
+                port    = os.getenv("LPORT")
                 token   = os.getenv("TOKEN")
                 pid     = os.getpid();
                 if post:

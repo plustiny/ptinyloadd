@@ -10,8 +10,6 @@ Settings conf = {
     .port   = 1881,
     .lport  = 1882, 
     .nthread = 2, 
-    .uname  = "foo",
-    .passwd = "bar",
     .dl_dir = "/var/tmp",
     .script_dir = "./libexec/ptinyloadd",
 };
@@ -45,10 +43,10 @@ ERROR:
 
 static int isenabled(char *env){
     char *s = getenv(env);
-    if( s && (s[0] == 'n' || s[0] == 'N' || s[0] == '0')){
-        return 0;
+    if( s && (s[0] == 'y' || s[0] == 'Y' || s[0] == '1')){
+        return 1;
     }
-    return 1;
+    return 0;
 }
 
 static int envtoi(char *env, int def){
@@ -91,7 +89,7 @@ void settings_load(){
     conf.force_https    = isenabled("FORCE_HTTPS");
     conf.no_local_auth  = isenabled("NO_LOCAL_AUTH");
     conf.nthread        = envtoi("NTHREAD", conf.nthread); 
-    conf.uname          = envstr("NAME", conf.uname);
+    conf.uname          = envstr("UNAME", conf.uname);
     conf.passwd         = get_and_clear("PASSWD", conf.passwd);
     conf.passwd_md5     = get_and_clear("PASSWD_MD5", conf.passwd_md5);
     conf.dl_dir         = envstr("DL_DIR", conf.dl_dir);

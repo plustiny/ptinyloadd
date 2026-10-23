@@ -5,6 +5,7 @@
 #include <string.h>
 #include <dirent.h>
 #include <regex.h>
+#include <errno.h>
 #include "main.h"
 #include "script_list.h"
 
@@ -52,11 +53,14 @@ static void script_add(script_t *x){
 }
 
 void script_load(){
+    errno = 0;
     DIR *dir = opendir(conf.script_dir);
     if(!dir){
-        perror("no such directory.\n");
+        eprintf("no such directory.\n");
+        if(errno) perror("opendir");
         return;
     }
+    
     char *files[1024] ={0};
     int nfiles = 0;
     struct dirent *ent;
@@ -71,13 +75,15 @@ void script_load(){
         files[nfiles++] = strdup(name);
     }
     closedir(dir);
+    if(errno) perror("readdir");
 
     qsort(files, nfiles, sizeof(char*), asc_order);
-
+    
     const char *meta_pat = "^[[:space:]]*#[[:space:]]*@([[:alnum:]]+)[[:space:]]+\"?([^\"]+)\"?[[:space:]]*$";
     regex_t meta_reg;
     if (regcomp(&meta_reg, meta_pat, REG_EXTENDED) != 0) {
-        perror("❌ ERROR! regcomp meta_pat.\n");
+        eprintf("❌ ERROR! regcomp meta_pat.\n");
+        if(errno) perror("regcomp");
         return;
     }
     for(int i = 0; i < nfiles; i++){
@@ -88,7 +94,8 @@ void script_load(){
         char line[1024];
         e = calloc(1, sizeof(script_t));
         if(e == NULL){
-            perror("❌ ERROR! memory allocation failed at script_load().\n");
+            eprintf("❌ ERROR! memory allocation failed at script_load().\n");
+            if(errno) perror("calloc");
             goto ERROR;
         }
         e->file = file;
@@ -96,6 +103,7 @@ void script_load(){
         f = fopen(path, "rb");
         if(!f){
             eprintf("%s is not file. SKIP\n", file);
+            if(errno) perror("fopen");
             goto ERROR;
         }
         while (fgets(line, sizeof line, f)) {

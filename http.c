@@ -74,7 +74,11 @@ static int md5cmp(char *plane, char *md5){
 }
 
 static int http_auth(char* name, char* passwd){
-    DBG("authorizing %s %s\n", name, passwd);
+    DBG("Authentication %s\n", name);
+    if(conf.passwd == NULL && conf.passwd_md5 == NULL){
+        eprintf("⚠ Username and password are recommended, but authentication succeeded.\n");
+        return true;
+    }
     if(strcmp(name, conf.uname)){
         DBG("name differ %s %s.\n", name, conf.uname);
         return false;

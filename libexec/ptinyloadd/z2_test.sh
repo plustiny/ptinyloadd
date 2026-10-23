@@ -4,7 +4,7 @@
 # @match		^test2$
 echo "pid= $$, token= $TOKEN"
 sleep 2
-echo curl -X POST -d test_re -u "$$:${TOKEN}" http://localhost:${LOCAL_PORT}
+echo curl -X POST -d test_re -u "$$:${TOKEN}" http://localhost:${LPORT}
 sleep 2
-curl -X POST -d test_re -u "$$:${TOKEN}" http://localhost:${LOCAL_PORT} 2>/dev/null
+curl -X POST -d test_re -u "$$:${TOKEN}" http://localhost:${LPORT} 2>/dev/null
 echo "exit stat $?"
