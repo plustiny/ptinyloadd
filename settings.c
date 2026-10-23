@@ -75,7 +75,11 @@ static char *get_and_clear(char *env, char *def){
     if(!s)  return def;
     char *ret = strdup(s);
     size_t n = strlen(s);
+#if defined(__STDC_LIB_EXT1__)
     memset_explicit(s, 0, n);
+#else
+    explicit_bzero(s, n);
+#endif
     unsetenv(env);
     return ret;
 }

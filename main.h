@@ -1,5 +1,6 @@
 #pragma once
 #include <stdio.h>
+#include <stdbool.h>
 #include "settings.h"
 #include "job_list.h"
 

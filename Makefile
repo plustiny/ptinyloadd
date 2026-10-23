@@ -1,6 +1,6 @@
 # Makefile
 CC := gcc
-CFLAGS := -std=gnu23 -Warray-bounds=2 -Wnull-dereference -Wuse-after-free=3 -Wall -Wextra -g -O0 -Wno-deprecated-declarations
+CFLAGS := -Warray-bounds=2 -Wnull-dereference -Wuse-after-free=3 -Wall -Wextra -g -O0 -Wno-deprecated-declarations
 TARGET := ptinyloadd
 SRC := main.c settings.c job_list.c script_list.c http.c utf8.c
 PKGS := libmicrohttpd jansson libcrypto zlib
@@ -54,6 +54,7 @@ uninstall:
 	rm -f  /etc/systemd/system/ptinyloadd.service
 
 gitupload:
+	make clean
 	git add .
 	git commit -m "$${MSG:-$$(date -Is)}" || true
 	git push -u origin main
