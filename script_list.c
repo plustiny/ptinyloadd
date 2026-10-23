@@ -5,8 +5,7 @@
 #include <string.h>
 #include <dirent.h>
 #include <regex.h>
-#include "debug.h"
-#include "config.h"
+#include "main.h"
 #include "script_list.h"
 
 #define KEY_NAME "name"
@@ -35,11 +34,11 @@ static script_t *script_free(script_t *x){
     if(x){
         next = x->next;
     }
-    free(x->file);
-    free(x->name);
-    free(x->desc);
+    FREE(x->file);
+    FREE(x->name);
+    FREE(x->desc);
     regfree(&x->matcher);
-    free(x);
+    FREE(x);
     return next;
 }
 
@@ -55,7 +54,7 @@ static void script_add(script_t *x){
 void script_load(){
     DIR *dir = opendir(conf.script_dir);
     if(!dir){
-        printf("no such directory.\n");
+        perror("no such directory.\n");
         return;
     }
     char *files[1024] ={0};
@@ -78,7 +77,7 @@ void script_load(){
     const char *meta_pat = "^[[:space:]]*#[[:space:]]*@([[:alnum:]]+)[[:space:]]+\"?([^\"]+)\"?[[:space:]]*$";
     regex_t meta_reg;
     if (regcomp(&meta_reg, meta_pat, REG_EXTENDED) != 0) {
-        printf("❌ ERROR! regcomp meta_pat.\n");
+        perror("❌ ERROR! regcomp meta_pat.\n");
         return;
     }
     for(int i = 0; i < nfiles; i++){
@@ -89,14 +88,14 @@ void script_load(){
         char line[1024];
         e = calloc(1, sizeof(script_t));
         if(e == NULL){
-            printf("❌ ERROR! memory allocation failed at script_load().\n");
+            perror("❌ ERROR! memory allocation failed at script_load().\n");
             goto ERROR;
         }
         e->file = file;
         snprintf(path, sizeof(path), "%s/%s", conf.script_dir, file);
         f = fopen(path, "rb");
         if(!f){
-            printf("%s is not file. SKIP\n", file);
+            eprintf("%s is not file. SKIP\n", file);
             goto ERROR;
         }
         while (fgets(line, sizeof line, f)) {
@@ -122,26 +121,26 @@ void script_load(){
                 DBG("convert %s to regex. err = %d.\n", value, err);
                 if(err){
                     char buf[256];
-                    printf("❌ ERROR! invalid regex pattern in %s.\n", file);
+                    eprintf("❌ ERROR! invalid regex pattern in %s.\n", file);
                     regerror(err, &(e->matcher), buf, sizeof(buf));
-                    printf("  %s\n", buf);
-                    printf("  SKIPED.\n");
+                    eprintf("  %s\n", buf);
+                    eprintf("  SKIPED.\n");
                     continue;
                 }
             }
         }
-        if(f)   fclose(f);
+        FCLOSE(f);
         if(e->name){
             script_add(e);
-            printf("add script. name: %s, file: %s\n", e->name, e->file);
+            DBG("add script. name: %s, file: %s\n", e->name, e->file);
         }else{
             goto ERROR;
         }
         continue;
 ERROR:
-        if(f)   fclose(f);
-        if(e)   free(e);
-        if(file) free(file);
+        FCLOSE(f);
+        FREE(e);
+        FREE(file);
         continue;
     }
     return;

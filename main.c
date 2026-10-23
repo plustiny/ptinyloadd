@@ -5,8 +5,10 @@
 #include <string.h>
 #include <execinfo.h>
 #include <stdlib.h>
-#include "debug.h"
-#include "config.h"
+#include <arpa/inet.h>
+#include <limits.h>
+#include "main.h"
+#include "settings.h"
 #include "job_list.h"
 #include "script_list.h"
 #include "http.h"
@@ -69,12 +71,15 @@ static ssize_t readbuf(int fd, char *buf, size_t bufsize){
 
 static void *worker(void *_line){
     DBG("worker\n");
+    char token[12];
     for(;;){
         DBG("> job_next.\n");LINE();
         Job_t *job = job_next();
         atomic_store(&(job->status), processing);
         job_clear_buf(job);
         job->ec = 0;
+        snprintf(token, sizeof token, "%d", job->token);
+        setenv("TOKEN", token, 1); 
 
         DBG("> new job: ");DBG_JOB(job);LINE();
         char pathname[1024];
@@ -104,6 +109,7 @@ static void *worker(void *_line){
         }
 
         LINE();
+        job->pid = pid;
         close(outfd[1]);
         close(errfd[1]);
         while(job->status == processing){
@@ -126,7 +132,6 @@ static void *worker(void *_line){
 
             LINE();
             if (outfd[0] != -1 && FD_ISSET(outfd[0], &rfds)) {
-                LINE();
                 ssize_t n = readbuf(outfd[0], job->out, JOB_LINE_LENGTH);
                 if ( n == 0 ){
                     close(outfd[0]);
@@ -134,10 +139,10 @@ static void *worker(void *_line){
                 } else if( n < 0){
                     goto ERROR;
                 }
+                DBG("[out]\n%s", job->out);LINE();
             }
             LINE();
             if (errfd[0] != -1 && FD_ISSET(errfd[0], &rfds)) {
-                LINE();
                 ssize_t n = readbuf(errfd[0], job->err, JOB_LINE_LENGTH);
                 if ( n == 0 ){
                     close(errfd[0]);
@@ -145,6 +150,7 @@ static void *worker(void *_line){
                 } else if( n < 0 ){
                     goto ERROR;
                 }
+                DBG("[err]\n%s", job->err);LINE();
             }
             LINE();
             if(outfd[0] == -1 && errfd[0] == -1)
@@ -182,12 +188,11 @@ ERROR:
     }
 }
 
-static int _sig;
-static volatile sig_atomic_t _running = 1;
+static atomic_int   _sig;
+static atomic_bool  _running = true;
 static void sig_handler(int sig) {
-    dprintf(STDOUT_FILENO, "=== signal catched ===\n");
     _sig = sig;
-    _running = 0;
+    _running = false;
 }
 
 int main(void) {
@@ -195,8 +200,8 @@ int main(void) {
     signal(SIGTERM, sig_handler);
     signal(SIGSEGV, sig_handler);
 
-    DBG("config_load()\n");
-    config_load();
+    DBG("settings_load()\n");
+    settings_load();
     DBG("script_load()\n");
     script_load();
     DBG("job_load()\n");
@@ -207,56 +212,80 @@ int main(void) {
     int _line[nthread];
     pthread_t thread[nthread];
     for(int i=0; i<nthread; i++){
-        pthread_t th = thread[i];
-        pthread_create(&th, NULL, worker, &_line[i]);
-        pthread_detach(th);
+        pthread_create(&thread[i], NULL, worker, &_line[i]);
+        pthread_detach(thread[i]);
     }
+
     DBG("start MHD daemon\n");
-    char mes[256] = {0};
-    struct MHD_Daemon *d = NULL;
+    struct MHD_Daemon *local_daemon = NULL;
+    struct MHD_Daemon *public_daemon = NULL;
+    App_data local_data  = { .is_local = 1 };
+    App_data public_data = { .is_local = 0 };
+    if( 0 < conf.lport){
+        struct sockaddr_in addr = {0};
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(conf.lport);
+        inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+
+        local_daemon = MHD_start_daemon(
+                MHD_USE_INTERNAL_POLLING_THREAD,
+                0,
+                &accept_policy, NULL,
+                &access_handler, &local_data,
+                MHD_OPTION_SOCK_ADDR, (struct sockaddr *)&addr,
+                MHD_OPTION_END
+                );
+        if(!local_daemon){
+            perror("failed to start local http server.\n");
+            goto FINALIZE;
+        }
+        eprintf("start local http server. waiting at :%d\n", conf.lport);
+    }
     if (conf.cert && conf.key) {
-        d = MHD_start_daemon(
+        public_daemon = MHD_start_daemon(
                 MHD_USE_INTERNAL_POLLING_THREAD | MHD_USE_TLS,
                 conf.port,
                 &accept_policy, NULL,
-                &access_handler, NULL,
+                &access_handler, &public_data,
                 MHD_OPTION_HTTPS_MEM_CERT, conf.cert,
                 MHD_OPTION_HTTPS_MEM_KEY,  conf.key,
                 MHD_OPTION_END
                 );
-        snprintf(mes, sizeof mes, "start https server. waiting at :%d\n", conf.port);
-    } else if (conf.force_https){
-        snprintf(mes, sizeof mes, "FORCE_HTTPS=yes. stop starting https server.\n");
-    } else {
-        d = MHD_start_daemon(
+        if(!public_daemon){
+            perror("failed to start public https server.\n");
+            goto FINALIZE;
+        }
+        eprintf("start public http server. waiting at :%d\n", conf.port);
+    }else if(conf.force_https){
+        perror("FORCE_HTTPS=yes. stop starting https server.\n");
+        goto FINALIZE;
+    }else{
+        public_daemon = MHD_start_daemon(
                 MHD_USE_INTERNAL_POLLING_THREAD,
                 conf.port,
                 &accept_policy, NULL,
-                &access_handler, NULL,
+                &access_handler, &public_data,
                 MHD_OPTION_END
                 );
-        snprintf(mes, sizeof mes, "start http server. waiting at :%d .\n", conf.port);
-    }
-
-    if (!d) {
-        if(strlen(mes)){
-            eprintf("%s", mes);
+        if(!public_daemon){
+            perror("failed to start public http server.\n");
+            goto FINALIZE;
         }
-        perror("failed to start server.\n");
-        return 1;
+        eprintf("start http server. waiting at :%d .\n", conf.port);
     }
-    eprintf("%s", mes);
 
     while(_running){
         pause();
     }
 
+FINALIZE:
     eprintf("stop server.\n");
-    MHD_stop_daemon(d);
+    if(local_daemon)  MHD_stop_daemon(local_daemon);
+    if(public_daemon) MHD_stop_daemon(public_daemon);
 
     job_unload();
     script_unload();
-    config_unload();
+    settings_unload();
 
     eprintf("=== server stoped ===\n");
     eprintf("signal:           %d\n", _sig);

@@ -4,7 +4,7 @@
 # @description	download images from 4chan
 # @match        "https?://[w.]*boards.4chan.org/"
 """
-パターン
+Sample
 File: <a title="532db43135c380dc7b5db9af5fb3dc79f646046b83956a3af7d75ed2e014bd95.jpg" href="//is2.4chan.org/a/1714134870397234.jpg" target="_blank">532db43135c380dc7b5db9af5(...).jpg</a> (1.27 MB, 2544x1668)</div>
 <a class="fileThumb" href="//is2.4chan.org/a/1714134870397234.jpg" target="_blank"><img src="//i.4cdn.org/a/1714134870397234s.jpg" alt="1.27 MB" data-md5="etmp+7/M+dKs8TmqDtQ0FQ==" style="height: 81px; width: 125px;" loading="lazy"><div data-tip data-tip-cb="mShowFull" class="mFileInfo mobile">1.27 MB JPG</div></a></div>
 
@@ -14,8 +14,8 @@ File: <a href="//is2.4chan.org/a/1714110604687580.jpg" target="_blank">5centemit
 titleがない
 
 File: <a title="[sound=https%3A%2F%2Fa.pomf.cat%2Fyoqalf.m4a].png" href="//is2.4chan.org/a/1714306999890194.png" target="_blank">[sound=https%3A%2F%2Fa.po(...).png</a> (178 KB, 500x500)</div>
-
 """
+
 import sys
 import shutil
 import re
@@ -74,6 +74,7 @@ def get_html(url):
     return html
 
 def parse_title(url, html):
+    print("parse title.")
     arr = []
     m = re.match(r'https?://[^/]+4chan.org/([^/]+)/[^/]+/([^/]+)', url)
     if m:
@@ -89,7 +90,6 @@ def parse_title(url, html):
     return "_".join(arr)
 
 def get_dl_dir(url, title):
-    print("parse title.")
     dl_dir = os.getenv("DL_DIR")
     if not dl_dir:
         dl_dir = "/var/tmp"
@@ -105,7 +105,7 @@ def save_page(html, title, dl_dir):
         file.write(html)
         print(f"save thread log file.")
 
-def parse_tag(html):
+def parse_itag(html):
     print("parsing a img tags.")
     links = set()
     for m in re.finditer(r'File: <a href="([^"]*)"[^>]*>([^<]*)</a>',html):
@@ -191,6 +191,13 @@ def parse_hidden(html):
         links.add((url, name))
     return links
 
+def nyaa_to_torrent(url):
+    m = re.search(r'nyaa.si/view/([0-9]*)', url)
+    if m:
+        num = m.group(1)
+        return f"https://nyaa.si/download/{num}.torrent"
+    return url;
+
 def parse(url):
     html = get_html(url)
     title = parse_title(url, html)
@@ -198,7 +205,7 @@ def parse(url):
     dl_dir = get_dl_dir(url, title)
     save_page(html, title, dl_dir)
     links = set()
-    links.update(parse_tag(html))
+    links.update(parse_itag(html))
     links.update(parse_dtag(html))
     links.update(parse_mp3(html))
     links.update(parse_hidden(html))
@@ -212,7 +219,10 @@ def download(links, dl_dir):
         url, name = links[i]
         try:
             print(f"\r[{i+1}/{length}] downloading: {url} .", flush=True)
-            if url.endswith((".gif",".jpg",".jpeg",".png",".webp",".webm",".mp3",".mp4")):
+            if "nyaa.si/view" in url:
+                url = nyaa_to_torrent(url)
+            if url.endswith((".html",".htm",".txt",".text",
+                             ".gif",".jpg",".jpeg",".png",".webp",".webm",".mp3",".mp4")):
                 o = ["-o", name] if name else []
                 subprocess.run(["aria2c", "-c", "-d", dl_dir, *o, url],
                                stdout=sys.stderr,
@@ -220,21 +230,21 @@ def download(links, dl_dir):
                                check=True)
                 print(f"\r[{i+1}/{length}] downloaded: {url} .", flush=True)
             elif not "boards.4chan.org" in url:
-                if "nyaa.si/view" in url:
-                    m = re.search(r'nyaa.si/view/([0-9]*)', url)
-                    if m:
-                        num = m.group(1)
-                        url = f"https://nyaa.si/download/{num}.torrent"
-                scheme  = os.getenv("SCHEME")
-                port    = os.getenv("PORT")
-                subprocess.run(["curl","-k", "-X","POST","-d", url, f"{scheme}://localhost:{port}"],
-                               stdout=sys.stderr,
-                               timeout=TIMEOUT,
-                               check=True)
-                with open(os.path.join(dl_dir, "repost.list"), "a") as f:
-                    f.write("\n" + url)
+                port    = os.getenv("LOCAL_PORT")
+                token   = os.getenv("TOKEN")
+                pid     = os.getpid();
+                if post:
+                    subprocess.run(["curl","-X","POST","-d", url,
+                                    "-u", f"{pid}:{token}", f"http://localhost:{port}"],
+                                   stdout=sys.stderr,
+                                   timeout=TIMEOUT,
+                                   check=True)
+                    with open(os.path.join(dl_dir, "repost.list"), "a") as f:
+                        f.write("\n" + url)
+                else:
+                    raise Exception("Repost denied.")
                 print(f"\r[{i+1}/{length}] repost:     {url} .", flush=True)
-            time.sleep(0.3)
+            time.sleep(0.1)
         except Exception as e:
             nerror += 1
             print(e, file=sys.stderr)

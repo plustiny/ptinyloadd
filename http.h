@@ -1,6 +1,10 @@
 #pragma once
 #include <microhttpd.h>
 
+typedef struct {
+    int is_local;
+} App_data;
+
 enum MHD_Result accept_policy(void *cls,
               const struct sockaddr *addr,
               socklen_t addrlen);

@@ -20,19 +20,31 @@
 #include <execinfo.h>
 #include <zlib.h>
 
+#include "main.h"
 #include "http.h"
-#include "debug.h"
-#include "config.h"
+#include "settings.h"
 #include "job_list.h"
 
-#define WRAPPER_SERVICE_NAME "ptinyloadd"
 #define GET "GET"
 #define POST "POST"
+
+typedef struct { 
+    char *data;
+    size_t len;
+} Conn_data;
+
+static char *str_append(char *dst, size_t dlen, const char *src, size_t slen){
+    char *p = realloc(dst, dlen + slen +1);
+    if(!p) return NULL;
+    memcpy(p + dlen, src, slen);
+    p[dlen+slen] = '\0';
+    return p;
+}
 
 static enum MHD_Result _debug_print_header_inner(void *cls, enum MHD_ValueKind kind,
         const char *key, const char *value){
     (void)cls;(void)kind;
-    printf("[%s]:[%s]\n", key, value);
+    eprintf("[%s]:[%s]\n", key, value);
     return MHD_YES;
 }
 
@@ -57,33 +69,33 @@ static char *md5str(const char *str){
 static int md5cmp(char *plane, char *md5){
     char *pmd5 = md5str(plane);
     int ret = strcmp(pmd5, md5);
-    free(pmd5);
+    FREE(pmd5);
     return ret;
 }
 
 static int http_auth(char* name, char* passwd){
     DBG("authorizing %s %s\n", name, passwd);
-    if(strcmp(name, conf.name)){
-        DBG("name differ %s %s.\n", name, conf.name);
-        return -1;
+    if(strcmp(name, conf.uname)){
+        DBG("name differ %s %s.\n", name, conf.uname);
+        return false;
     }
     if(conf.passwd_md5){
         if(md5cmp(passwd, conf.passwd_md5)){
             DBG("passwd_md5 differ.\n");
-            return -1;
+            return false;
         }
         DBG("passwd_md5 matched.\n");
-        return 0;
+        return true;
     }else if(conf.passwd){
         if(strcmp(passwd, conf.passwd)){
             DBG("passwd differ.\n");
-            return -1;
+            return false;
         }
         DBG("passwd matched.\n");
-        return 0;
+        return true;
     }
-    printf("❌ ERROR! name or password are not set.\n");
-    return -1;
+    eprintf("❌ ERROR! name or password are not set.\n");
+    return false;
 }
 
 static void query_restart(const char *id, Job_status status){
@@ -150,7 +162,7 @@ static unsigned char *gzip_compress(const char* src, size_t src_size, size_t *ou
     *out_size = zs.total_out;
     return buf;
 ERROR:
-    free(buf);
+    FREE(buf);
     deflateEnd(&zs);
     return NULL; 
 }
@@ -193,7 +205,7 @@ static char *gzip_decompress(char *src, size_t src_size, size_t *out_size){
     tmp[total] = '\0';
     return tmp;
 ERROR:
-    free(buf);
+    FREE(buf);
     inflateEnd(&zs);
     return NULL;
 }
@@ -206,11 +218,6 @@ static enum MHD_Result http_response(struct MHD_Connection *connection, unsigned
     MHD_destroy_response(resp);
     return ret;
 }
-
-struct post_data {
-    char *data;
-    size_t len;
-};
 
 static int is_localhost(struct MHD_Connection *connection)
 {
@@ -235,6 +242,172 @@ static int is_localhost(struct MHD_Connection *connection)
     return 0;
 }
 
+static bool http_authorize(void *cls, struct MHD_Connection *c){
+    struct MHD_BasicAuthInfo *auth = MHD_basic_auth_get_username_password3(c);
+    App_data *app = cls;
+    int auth_ok = false;
+    if(app->is_local){
+        if(!is_localhost(c)){
+            auth_ok = false;
+        }else if(conf.no_local_auth){
+            auth_ok = true;
+        }else if(auth && job_auth(auth->username, auth->password)){
+            auth_ok = true;
+        }
+    }else{
+        if(auth && http_auth(auth->username, auth->password)){
+            auth_ok = true;
+        }
+    }
+    return auth_ok;
+}
+
+static enum MHD_Result http_get(struct MHD_Connection *c){
+    DBG(" > GET\n");
+    const char *query = MHD_lookup_connection_value(c, MHD_GET_ARGUMENT_KIND,"query");
+    const char *id    = MHD_lookup_connection_value(c, MHD_GET_ARGUMENT_KIND,"id");
+    const char *status= MHD_lookup_connection_value(c, MHD_GET_ARGUMENT_KIND,"status");
+    const char *max   = MHD_lookup_connection_value(c, MHD_GET_ARGUMENT_KIND,"max");
+    Job_status s = (Job_status)~deleted;
+    if(status){
+        s = atoi(status);
+    }
+    uint32_t m = UINT32_MAX;
+    if(max){
+        m = atoll(max);
+    }
+
+    DBG(" > GET query=%s\n",query);
+    char *dst = NULL;
+    if(query && strcmp(query, "restart")==0){
+        DBG(" > query restart id= %s, status=%d.\n", id, s);
+        query_restart(id, s);
+        return http_response(c, MHD_HTTP_OK);
+    }
+    if(query && strcmp(query, "cancel")==0){
+        DBG(" > query cancel id= %s, status=%d.\n", id, s);
+        query_cancel(id, s);
+        return http_response(c, MHD_HTTP_OK);
+    }
+    if(query && strcmp(query, "delete")==0){
+        DBG(" > query delete id= %s, status=%d.\n", id, s);
+        query_delete(id, s);
+        return http_response(c, MHD_HTTP_OK);
+    }
+    if(query && strcmp(query,"select")==0){
+        DBG(" > query select max=%u,status=%d.\n", m, s);
+        dst = query_select(m, s);
+    }
+    if(query && strcmp(query,"meta")==0){
+        DBG(" > query meta.\n");
+        dst = query_meta();
+        DBG(" META: %s\n", dst);
+    }
+
+    if(dst){
+        size_t dst_size = strlen(dst);
+        unsigned char *gzip = NULL;
+        size_t gzip_size = SIZE_MAX;
+        const char *accept_encoding = 
+            MHD_lookup_connection_value(c, MHD_HEADER_KIND, "Accept-Encoding");
+        if(accept_encoding && strstr(accept_encoding, "gzip")){
+            gzip = gzip_compress(dst, dst_size, &gzip_size);
+        }
+
+        enum MHD_Result ret;
+        struct MHD_Response *resp;
+        if(gzip_size < dst_size){
+            resp = MHD_create_response_from_buffer(gzip_size, (void*)gzip, MHD_RESPMEM_MUST_FREE);
+            MHD_add_response_header(resp, "Content-Type", "application/json");
+            MHD_add_response_header(resp, "Content-Encoding", "gzip");
+            FREE(dst);
+        }else{
+            resp = MHD_create_response_from_buffer(dst_size, (void*)dst, MHD_RESPMEM_MUST_FREE);
+            MHD_add_response_header(resp, "Content-Type", "application/json");
+            FREE(gzip);
+        }
+        MHD_add_response_header(resp, "Vary", "Accept-Encoding");
+        ret = MHD_queue_response(c, MHD_HTTP_OK, resp);
+        MHD_destroy_response(resp);
+        return ret;
+    }
+    return http_response(c, MHD_HTTP_BAD_REQUEST);
+}
+
+static enum MHD_Result http_post(struct MHD_Connection *c,
+        const char *upload_data,
+        size_t *upload_data_size,
+        void **con_cls){
+    DBG(" > post\n");
+    enum MHD_Result result;// = http_response(c, MHD_HTTP_INTERNAL_SERVER_ERROR);
+    Conn_data *d = NULL;
+    char *post = NULL;
+    if (*con_cls == NULL) {
+        *con_cls = calloc(1, sizeof(Conn_data));
+        if (!con_cls) return MHD_NO;
+        return MHD_YES;
+    }
+    d = *con_cls;
+
+    DBG(" > post+\n");
+    if (*upload_data_size != 0) {
+        char *p = str_append(d->data, d->len, upload_data, *upload_data_size);
+        if (!p) return MHD_NO;
+        d->data = p;
+        d->len += *upload_data_size;
+        *upload_data_size = 0;
+        return MHD_YES;
+    }
+
+    post = d->data;
+    size_t len = d->len;
+    FREE(d);
+    DBG(" > post packete comped. post:[%s]\n", post);
+    DBG(" > check is compressed.\n");
+    const char *encoding =
+        MHD_lookup_connection_value(c, MHD_HEADER_KIND, "Content-Encoding");
+    DBG(" > encoding: %s\n", encoding);
+    if(encoding && strstr(encoding,"gzip")){
+        DBG(" > it's compressed!.\n");
+        size_t _size;
+        char *tmp = gzip_decompress(post, len, &_size);
+        if(tmp){
+            FREE(post);
+            post = tmp;
+        }
+    }
+    
+    DBG(" > check post has data.\n");
+    if( post == NULL ){
+        eprintf("⚠ post is null. %s\n", post);
+        result = http_response(c, MHD_HTTP_BAD_REQUEST);
+        goto FINALLY;
+    }
+
+    DBG(" > search script file. post:%s.\n", post);
+    script_t *script = script_search(post);
+    if(script == NULL){
+        eprintf("⚠ donot match any scripts. %s\n", post);
+        result = http_response(c, MHD_HTTP_ACCEPTED);
+        goto FINALLY;
+    }
+
+    DBG(" > add job: %s %s.\n", script->name, post);
+    int ret = job_register(post, script);
+    if(ret){
+        eprintf("error at adding.\n");
+        result = http_response(c, MHD_HTTP_INTERNAL_SERVER_ERROR);
+    }else{
+        DBG(" > added.\n");
+        result = http_response(c, MHD_HTTP_ACCEPTED);
+    }
+FINALLY:
+    FREE(post);
+    return result;
+}
+
+
+
 enum MHD_Result accept_policy(void *cls,
               const struct sockaddr *addr,
               socklen_t addrlen)
@@ -252,7 +425,7 @@ enum MHD_Result accept_policy(void *cls,
     if(ret){
         return MHD_YES;
     }else{
-        printf("refused connect from %s by TCP wrappers.\n", host);
+        eprintf("refused connect from %s by TCP wrappers.\n", host);
         return MHD_NO;
     }
 }
@@ -266,163 +439,31 @@ enum MHD_Result access_handler(void *cls,
                            size_t *upload_data_size,
                            void **con_cls)
 {
-    (void)cls; (void)url; (void)version;
+    (void)url; (void)version;
 
     DBG("new request.\n");
     if(conf.debug){
         DBG(" > headers\n");
         _debug_print_header(c);
     }
-
-    struct MHD_BasicAuthInfo *auth = MHD_basic_auth_get_username_password3(c);
-    int no_auth = conf.no_auth_local && is_localhost(c);
-    if(!no_auth && (!auth || http_auth(auth->username, auth->password))){
+    
+    bool auth_ok = http_authorize(cls, c);
+    if(!auth_ok){
         DBG(" > auth failed.\n");
         return http_response(c, MHD_HTTP_UNAUTHORIZED);
     }
+
     DBG(" > auth OK.\n");
     if(!method){
         DBG(" > method is null\n");
         return http_response(c, MHD_HTTP_BAD_REQUEST);
     }
+    
     DBG(" > method: %s\n", method);
-
     if (strncmp(method, GET, sizeof GET) == 0){
-        DBG(" > GET\n");
-        const char *query = MHD_lookup_connection_value(c, MHD_GET_ARGUMENT_KIND,"query");
-        const char *id    = MHD_lookup_connection_value(c, MHD_GET_ARGUMENT_KIND,"id");
-        const char *status= MHD_lookup_connection_value(c, MHD_GET_ARGUMENT_KIND,"status");
-        const char *max   = MHD_lookup_connection_value(c, MHD_GET_ARGUMENT_KIND,"max");
-        Job_status s = (unsigned int)(~deleted);
-        if(status){
-            s = atoi(status);
-        }
-        uint32_t m = UINT32_MAX;
-        if(max){
-            m = atoll(max);
-        }
-
-        DBG(" > GET query=%s\n",query);
-        char *dst = NULL;
-        if(query && strcmp(query, "restart")==0){
-            DBG(" > query restart id= %s, status=%d.\n", id, s);
-            query_restart(id, s);
-            return http_response(c, MHD_HTTP_OK);
-        }
-        if(query && strcmp(query, "cancel")==0){
-            DBG(" > query cancel id= %s, status=%d.\n", id, s);
-            query_cancel(id, s);
-            return http_response(c, MHD_HTTP_OK);
-        }
-       if(query && strcmp(query, "delete")==0){
-            DBG(" > query delete id= %s, status=%d.\n", id, s);
-            query_delete(id, s);
-            return http_response(c, MHD_HTTP_OK);
-        }
-        if(query && strcmp(query,"select")==0){
-            DBG(" > query select max=%u,status=%d.\n", m, s);
-            dst = query_select(m, s);
-        }
-        if(query && strcmp(query,"meta")==0){
-            DBG(" > query meta.\n");
-            dst = query_meta();
-            DBG(" META: %s\n", dst);
-        }
-
-        if(dst){
-            size_t dst_size = strlen(dst);
-            unsigned char *gzip = NULL;
-            size_t gzip_size = SIZE_MAX;
-            const char *accept_encoding = 
-                MHD_lookup_connection_value(c, MHD_HEADER_KIND, "Accept-Encoding");
-            if(accept_encoding && strstr(accept_encoding, "gzip")){
-                gzip = gzip_compress(dst, dst_size, &gzip_size);
-            }
-
-            enum MHD_Result ret;
-            struct MHD_Response *resp;
-            if(gzip_size < dst_size){
-                resp = MHD_create_response_from_buffer(gzip_size, (void*)gzip, MHD_RESPMEM_MUST_FREE);
-                MHD_add_response_header(resp, "Content-Type", "application/json");
-                MHD_add_response_header(resp, "Content-Encoding", "gzip");
-                free(dst);
-            }else{
-                resp = MHD_create_response_from_buffer(dst_size, (void*)dst, MHD_RESPMEM_MUST_FREE);
-                MHD_add_response_header(resp, "Content-Type", "application/json");
-                free(gzip);
-            }
-            MHD_add_response_header(resp, "Vary", "Accept-Encoding");
-            ret = MHD_queue_response(c, MHD_HTTP_OK, resp);
-            MHD_destroy_response(resp);
-            return ret;
-        }
-        return http_response(c, MHD_HTTP_BAD_REQUEST);
-    }
-
-    DBG(" > post");
-    if (*con_cls == NULL) {
-        *con_cls = calloc(1, sizeof(struct post_data));
-        if (!con_cls) return MHD_NO;
-        return MHD_YES;
-    }
-    struct post_data *pd = *con_cls;
-
-    if (*upload_data_size != 0) {
-        char *p = realloc(pd->data, pd->len + *upload_data_size + 1);
-        if (!p) return MHD_NO;
-
-        pd->data = p;
-        memcpy(pd->data + pd->len, upload_data, *upload_data_size);
-        pd->len += *upload_data_size;
-        pd->data[pd->len] = '\0';
-
-        *upload_data_size = 0;
-        return MHD_YES;
-    }
-
-    DBG(" > post packete comped. post:[%s]\n", pd->data);
-    char *post = NULL;
-    
-    DBG(" > check is compressed.\n");
-    const char *encoding =
-        MHD_lookup_connection_value(c, MHD_HEADER_KIND, "Content-Encoding");
-    DBG(" > encoding: %s\n", encoding);
-    if(encoding && strstr(encoding,"gzip")){
-        DBG(" > compressed!.\n");
-        size_t _size;
-        post = gzip_decompress(pd->data, pd->len, &_size);
-        free(pd->data);
-        free(pd);
-        pd = NULL;
+        return http_get(c);
     }else{
-        DBG(" > plane text.\n");
-        post = pd->data;
-        free(pd);
-    }
-    
-    DBG(" > check post has data.\n");
-    if( post == NULL ){
-        DBG(" > post is null. end.\n");
-        printf("⚠ post is null. %s\n", post);
-        return http_response(c, MHD_HTTP_BAD_REQUEST);
-    }
-
-    DBG(" > search script file. post:%s.\n", post);
-    script_t *script = script_search(post);
-    if(script == NULL){
-        DBG(" > donot match any scripts. end.\n");
-        printf("⚠ donot match any scripts. %s\n", post);
-    }
-
-    DBG(" > add job: %s %s.\n", script->name, post);
-    int ret = job_register(post, script);
-    free(post);
-    if(ret){
-        eprintf("error at adding.\n");
-        return http_response(c, MHD_HTTP_INTERNAL_SERVER_ERROR);
-    }else{
-        DBG(" > added.\n");
-        return http_response(c, MHD_HTTP_ACCEPTED);
+        return http_post(c, upload_data, upload_data_size, con_cls);
     }
 }
 

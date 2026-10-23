@@ -97,3 +97,16 @@ else
 	echo [ERR] $status
 fi
 
+echo
+echo test re-post
+status=$($CURL -X POST http://foo:bar@localhost:1881 -d test2)
+if [ "$status" = "202" ];then
+	echo [OK] 202 Accepted
+else
+	echo [ERR] $status
+fi
+status=$($CURL --compressed -X GET http://foo:bar@localhost:1881/?query=select)
+cat $TMP
+echo
+
+

@@ -7,7 +7,7 @@
 #define JOB_LINE_LENGTH 512
 
 #define JOB_STATUS_LIST(X) \
-    X(all, (unsigned int)-1) \
+    X(all, (uint8_t)-1) \
     X(none, 0) \
     X(unprocessed, 1) \
     X(processing, 2) \
@@ -20,7 +20,7 @@
     X(terminated, finished|error|canceling|canceled) \
 
 #define ENUM_ITEM(name, value) name = value,
-typedef enum Job_status {
+typedef enum : uint8_t {
     JOB_STATUS_LIST(ENUM_ITEM)
 } Job_status;
 #undef ENUM_ITEM
@@ -35,6 +35,8 @@ struct Job {
     char *scriptname;
     int  ec;
     _Atomic Job_status status;
+    pid_t   pid;
+    int     token;
 		struct Job *next;
 };
 typedef struct Job Job_t;
@@ -47,4 +49,4 @@ json_t *job_metadata();
 json_t *job_to_json(uint32_t max, Job_status status);
 void job_change_status(const char *id, Job_status status, Job_status proc, Job_status wait);
 void job_clear_buf(Job_t *);
- 
+int job_auth(char *pid, char *token); 

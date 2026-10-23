@@ -1,13 +1,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stddef.h>
-#include "debug.h"
-
-static void hexdump(unsigned char c){
-    eprintf("fix: %02X ", c);
-    eputc(c >= 0x20 && c <= 0x7E ? c : '.');
-    eputc('\n');
-}
+#include "main.h"
 
 /* 末尾のUTF-8文字を完成させるのに必要なバイト数
    -n: 不正、0: 追加不要、正数: 不足バイト数 */
@@ -89,8 +83,7 @@ static size_t utf8_len(const unsigned char *s)
 int utf8_fix(char *s)
 {
     if (s == NULL)
-        return -1;
-
+        return 0;
     unsigned char *p = (unsigned char *)s;
     int repaired = 0;
     while (*p != '\0') {
@@ -98,7 +91,7 @@ int utf8_fix(char *s)
         if (n != 0) {
             p += n;
         } else {
-            hexdump(*p);
+            DBG_HEX(*p);
             *p++ = '?';
             repaired++;
         }

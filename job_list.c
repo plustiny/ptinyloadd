@@ -4,16 +4,23 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include "debug.h"
-#include "config.h"
+#include <limits.h>
+#include <sys/types.h>
+#include <time.h>
+#include <errno.h>
+#include "main.h"
+#include "settings.h"
 #include "job_list.h"
 #include "script_list.h"
 #include "utf8.h"
 
-#define ABORT_FILE  "ptinyloadd_abort.json"
-
 static pthread_mutex_t job_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t  job_cond  = PTHREAD_COND_INITIALIZER;
+
+static int rand_int(){
+    unsigned int x = ((unsigned)rand() << 16) ^ (unsigned)rand();
+    return (int)x;
+}
 
 static uint32_t _id = 0;
 static const char ALPHABET[] =
@@ -62,13 +69,13 @@ static Job_t *job_free(Job_t *job){
         next = job->next;
     }
     job->status = none;
-    free(job->id);
-    free(job->post);
-    free(job->out);
-    free(job->err);
-    free(job->scriptfile);
-    free(job->scriptname);
-    free(job);
+    FREE(job->id);
+    FREE(job->post);
+    FREE(job->out);
+    FREE(job->err);
+    FREE(job->scriptfile);
+    FREE(job->scriptname);
+    FREE(job);
     return next;
 }
 
@@ -132,6 +139,7 @@ int job_register(char *post, script_t *script){
         job->err = strdup("don't match any script.");
         job->status = canceled;
     }
+    job->token = rand_int();
     job_add(job);
     pthread_cond_signal(&job_cond);
     pthread_mutex_unlock(&job_mutex);
@@ -235,6 +243,7 @@ void job_unload(){
 }
 
 void job_load(){
+    srand((unsigned)time(NULL));
     char pathname[1024];
     snprintf(pathname, sizeof(pathname), "%s/%s", conf.dl_dir, ABORT_FILE);
 
@@ -256,6 +265,7 @@ void job_load(){
         job->err = json_str_val(obj, "err");
         job->ec = json_integer_value(json_object_get(obj,"ec"));
         job->status = json_integer_value(json_object_get(obj,"status"));
+        job->token = rand_int();
         job_add(job);
     }
 }
@@ -300,3 +310,17 @@ void job_clear_buf(Job_t *job){
     }
 }
 
+int job_auth(char *_pid, char *_token){
+    errno = 0;
+    pid_t pid = (pid_t)strtol(_pid, NULL, 10);
+    if(errno) return false;
+    int token = (int)strtol(_token, NULL, 10);
+    if(errno) return false;
+    Job_t *job = job_head;
+    while(job){
+        if(job->pid == pid && job->token == token)
+            return true;
+        job = job->next;
+    }
+    return false;
+}
