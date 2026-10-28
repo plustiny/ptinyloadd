@@ -95,8 +95,14 @@ void settings_load(){
     conf.dl_dir         = envstr("DL_DIR", conf.dl_dir);
     setenv("DL_DIR", conf.dl_dir, 0);
     conf.script_dir     = envstr("SCRIPT_DIR", conf.script_dir);
-    conf.cert           = load_file(getenv("CERT"));
-    conf.key            = load_file(getenv("KEY"));
+    char path[4096];
+    const char *dir = getenv("CREDENTIALS_DIRECTORY");
+    if(dir){
+        snprintf(path, sizeof(path), "%s/fullchain.pem", dir);
+        conf.cert           = load_file(path);
+        snprintf(path, sizeof(path), "%s/privkey.pem", dir);
+        conf.key            = load_file(path);
+    }
     
     DBG("DEBUG: %d\n", conf.debug);
     DBG("PORT: %d\n", conf.port);

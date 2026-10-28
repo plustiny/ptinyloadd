@@ -266,6 +266,8 @@ int main(void) {
                 MHD_OPTION_HTTPS_MEM_KEY,  conf.key,
                 MHD_OPTION_END
                 );
+        FREE(conf.cert);
+        FREE(conf.key);
         if(!public_daemon){
             eprintf("failed to start public https server.\n");
             if(errno) perror("server");

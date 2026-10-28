@@ -8,12 +8,6 @@ export DL_DIR=/var/tmp/
 export SCRIPT_DIR=./libexec/ptinyloadd
 export FORCE_HTTPS=no
 export NO_LOCAL_AUTH=no
-KEYFILE=/etc/letsencrypt/live/*/privkey.pem
-CERTFILE=/etc/letsencrypt/live/*/fullchain.pem
-[ -e $KEYFILE ] && [ ! -e $(basename $KEYFILE) ] && ln -s $KEYFILE ./
-[ -e $CERTFILE ] && [ ! -e $(basename $CRETFILE) ] && ln -s $CERTFILE ./
-export CERT=./fullchain.pem
-export KEY=./privkey.pem
 
 if command -v gdb >/dev/null; then
  gdb -ex 'set confirm off' -ex run --args ./ptinyloadd

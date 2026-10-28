@@ -5,10 +5,12 @@ After=nftables.service
 After=network.target
 
 [Service]
+LoadCredential=privkey.pem:/etc/letsencrypt/live/(your.server)/privkey.pem
+LoadCredential=fullchain.pem:/etc/letsencrypt/live/(your.server)/fullchain.pem
+EnvironmentFile=/usr/local/etc/ptinyloadd/ptinyloadd.conf
 User=ptinyload
 Group=share
 UMask=002
-EnvironmentFile=/usr/local/etc/ptinyloadd/ptinyloadd.conf
 ExecStart=/usr/local/bin/ptinyloadd
 KillMode=mixed
 Restart=always
@@ -24,7 +26,7 @@ ProtectSystem=full
 ProtectControlGroups=yes
 ProtectKernelModules=yes
 ProtectKernelTunables=yes
-RestrictAddressFamilies=AF_INET AF_INET6
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
 RestrictNamespaces=yes
 RestrictRealtime=yes
 MemoryDenyWriteExecute=yes
